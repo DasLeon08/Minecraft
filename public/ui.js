@@ -19,7 +19,6 @@ hotbarSlots[3] = 'wood';
 const hotbarEl = document.getElementById('hotbar');
 const inventoryEl = document.getElementById('inventory');
 const inventoryItemsEl = document.getElementById('inventory-items');
-const closeInvBtn = document.getElementById('close-inventory');
 const craftSlots = document.querySelectorAll('#crafting-grid .craft-slot');
 const craftResult = document.getElementById('crafting-result');
 
@@ -208,11 +207,6 @@ export function toggleInventory(controls) {
         controls.lock();
     }
 }
-
-closeInvBtn.addEventListener('click', () => {
-    const controls = document.querySelector('canvas').__controls; // Hacky access or pass via game.js
-    // We will trigger unlock natively via game.js keydown instead
-});
 
 // Health and Hunger
 let health = 20; // 20 half-hearts (10 full hearts)

@@ -174,7 +174,6 @@ for (const key in blockMaterials) {
 const controls = new PointerLockControls(camera, document.body);
 const instructions = document.getElementById('instructions');
 const inventoryEl = document.getElementById('inventory');
-const closeInvBtn = document.getElementById('close-inventory');
 
 instructions.addEventListener('click', () => {
     if (inventoryEl.style.display !== 'block') {
@@ -191,10 +190,6 @@ controls.addEventListener('unlock', () => {
     if (inventoryEl.style.display !== 'block') {
         instructions.style.display = 'block';
     }
-});
-
-closeInvBtn.addEventListener('click', () => {
-    controls.lock();
 });
 
 scene.add(controls.getObject());
@@ -624,7 +619,7 @@ function applyBlockUpdate(data) {
 }
 
 // --- Voxel Interaction (Mining / Placing) ---
-export let activeBlockType = 'dirt'; // Default placeable block
+export var activeBlockType = 'dirt'; // Default placeable block
 
 // Simple function to change active block (used later by UI)
 export function setActiveBlock(type) {
