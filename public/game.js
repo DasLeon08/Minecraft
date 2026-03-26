@@ -8,16 +8,16 @@ const socket = io(); // Connect to Socket.IO
 
 // Basic setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Nice sky blue
-scene.fog = new THREE.FogExp2(0x87CEEB, 0.015); // Better, more natural volumetric-looking fog
+scene.background = new THREE.Color(0x5caeff); // Richer sky blue
+scene.fog = new THREE.FogExp2(0x5caeff, 0.008); // Reduced fog density for longer draw distance
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 // --- Sun ---
-const sunGeo = new THREE.BoxGeometry(8, 8, 8);
-const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFFF88 }); // Bright yellow/white
+const sunGeo = new THREE.BoxGeometry(10, 10, 10);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffcf0 }); // Bright warm white
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-sunMesh.position.set(100, 200, 50); // Matches directional light
+sunMesh.position.set(150, 300, 100); // Matches directional light
 scene.add(sunMesh);
 
 // --- Clouds ---
@@ -36,7 +36,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.2; // Increase exposure slightly
 document.body.appendChild(renderer.domElement);
 
 // --- Selection Outline ---
@@ -47,25 +47,25 @@ selectionOutline.visible = false;
 scene.add(selectionOutline);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // slightly dimmer ambient
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Slightly brighter ambient
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.0); // warmer light
-directionalLight.position.set(100, 200, 50);
+const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.5); // Stronger warmer light
+directionalLight.position.set(150, 300, 100);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
 directionalLight.shadow.mapSize.height = 4096;
 directionalLight.shadow.bias = -0.0005; // fix shadow acne
 directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 500;
-directionalLight.shadow.camera.left = -100; // expanded shadow area
-directionalLight.shadow.camera.right = 100;
-directionalLight.shadow.camera.top = 100;
-directionalLight.shadow.camera.bottom = -100;
+directionalLight.shadow.camera.far = 1000;
+directionalLight.shadow.camera.left = -200; // significantly expanded shadow area for mountains
+directionalLight.shadow.camera.right = 200;
+directionalLight.shadow.camera.top = 200;
+directionalLight.shadow.camera.bottom = -200;
 scene.add(directionalLight);
 
 // Hemisphere light for better outdoor lighting (blueish sky, greenish ground)
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
 hemiLight.position.set(0, 200, 0);
 scene.add(hemiLight);
 
@@ -82,6 +82,15 @@ export const blockMaterials = {
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // front
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) })  // back
     ],
+    snow_dirt: [
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // right
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // left
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('snow')) }),  // top
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),       // bottom
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // front
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) })  // back
+    ],
+    snow: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('snow')) }),
     dirt: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),
     stone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('stone')) }),
     wood: [
@@ -336,16 +345,32 @@ function updateAdjacentBlocksVisibility(x, y, z) {
 // Generate the initial world map
 for (let x = -worldSize / 2; x < worldSize / 2; x++) {
     for (let z = -worldSize / 2; z < worldSize / 2; z++) {
-        // Heightmap via 2D noise
-        const noiseVal = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0);
-        const y = Math.floor(noiseVal * 10) - 5 + 0.5; // Offset to n.5 so top is at integer
+        // Heightmap via 2D noise with dramatic mountainous terrain
+        const baseNoise = noise.fbm2D(x * 0.015, z * 0.015, 5, 0.5, 2.0); // Continental noise
+        const detailNoise = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0); // Detail bumps
 
-        // Determine surface block type
+        // Exponentiate the base noise to create flat valleys and steep mountains
+        // Adding 1 before squaring/cubing ensures we don't zero out negative values poorly
+        const elevation = Math.pow(Math.abs(baseNoise) * 2.5, 2.5) * Math.sign(baseNoise);
+
+        // Combine low-frequency dramatic elevation with high-frequency detail
+        let rawHeight = (elevation * 30) + (detailNoise * 8) - 10;
+
+        // Make sure it doesn't go below bedrock
+        rawHeight = Math.max(rawHeight, worldDepth + 1);
+
+        const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
+
+        // Determine surface block type based on height
         let surfaceBlock = 'grass';
-        if (y < -3.5) {
+        if (y < -2.5) {
             surfaceBlock = 'sand'; // Beach/ocean floor level
-        } else if (y > 2.5) {
-            surfaceBlock = 'stone'; // Mountain tops
+        } else if (y > 35.5) {
+            surfaceBlock = 'snow'; // Very high mountain peaks
+        } else if (y > 22.5) {
+            surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
+        } else if (y > 15.5) {
+            surfaceBlock = 'stone'; // Rocky mountain sides
         }
 
         // Generate deep world layer by layer
@@ -424,8 +449,11 @@ worldData.forEach((type, key) => {
 });
 
 // Adjust camera spawn height based on terrain center
-const spawnNoise = noise.fbm2D(0, 0, 4, 0.5, 2.0);
-const spawnY = Math.floor(spawnNoise * 10) - 5 + 2.5;
+const spawnBase = noise.fbm2D(0, 0, 5, 0.5, 2.0);
+const spawnDetail = noise.fbm2D(0, 0, 4, 0.5, 2.0);
+const spawnElev = Math.pow(Math.abs(spawnBase) * 2.5, 2.5) * Math.sign(spawnBase);
+const spawnRawHeight = (spawnElev * 30) + (spawnDetail * 8) - 10;
+const spawnY = Math.floor(Math.max(spawnRawHeight, -3)) + 5.5; // Safe spawn height (above water)
 camera.position.set(0, spawnY, 0);
 
 // --- Multiplayer Setup ---

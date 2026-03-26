@@ -25,7 +25,9 @@ export function generateTexture(type) {
         diamond_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#4aedd8', '#42d6c3'],
         water: ['#3e6db5', '#335c9a', '#4c86d1'], // Water blues
         lava: ['#e85f1c', '#f58727', '#d63c0f', '#fce230'], // Lava reds/oranges
-        bedrock: ['#333333', '#222222', '#111111', '#444444', '#000000'] // Very dark scattered
+        bedrock: ['#333333', '#222222', '#111111', '#444444', '#000000'], // Very dark scattered
+        snow: ['#ffffff', '#f2f2f2', '#e6e6e6', '#d9d9d9'], // Snow/Ice colors
+        dirt_snow_side: ['#866043', '#79553a', '#966c4a'] // Base is dirt, snow top added later
     };
 
     const scheme = colors[type] || colors.dirt;
@@ -40,18 +42,19 @@ export function generateTexture(type) {
     }
 
     // Special patterns
-    if (type === 'grass_side') {
-        const grassColors = colors.grass_top;
-        // Top 4 pixels are solid grass
+    if (type === 'grass_side' || type === 'dirt_snow_side') {
+        const topColors = type === 'grass_side' ? colors.grass_top : colors.snow;
+
+        // Top 4 pixels are solid grass/snow
         for (let x = 0; x < 16; x++) {
             for (let y = 0; y < 4; y++) {
-                ctx.fillStyle = grassColors[Math.floor(Math.random() * grassColors.length)];
+                ctx.fillStyle = topColors[Math.floor(Math.random() * topColors.length)];
                 ctx.fillRect(x, y, 1, 1);
             }
-            // Drip down effect for grass
+            // Drip down effect
             let dripLength = Math.floor(Math.random() * 3); // 0 to 2 extra pixels
             for (let y = 4; y < 4 + dripLength; y++) {
-                ctx.fillStyle = grassColors[Math.floor(Math.random() * grassColors.length)];
+                ctx.fillStyle = topColors[Math.floor(Math.random() * topColors.length)];
                 ctx.fillRect(x, y, 1, 1);
             }
         }

@@ -6,7 +6,7 @@ const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
-    'water', 'lava', 'bedrock'
+    'water', 'lava', 'bedrock', 'snow', 'snow_dirt'
 ];
 const hotbarSlots = new Array(9).fill(null);
 // Initialize hotbar with some default items
@@ -35,6 +35,7 @@ availableItems.forEach(type => {
     let texType = type;
     if (type === 'grass') texType = 'grass_top';
     if (type === 'wood') texType = 'wood_side';
+    if (type === 'snow_dirt') texType = 'dirt_snow_side';
     textureCache[type] = generateTexture(texType);
 });
 
