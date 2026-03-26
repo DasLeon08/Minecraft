@@ -8,8 +8,8 @@ const socket = io(); // Connect to Socket.IO
 
 // Basic setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x7FB9F2); // Slightly more vibrant sky
-scene.fog = new THREE.Fog(0x7FB9F2, 20, 60); // Bring fog closer to hide pop-in and add atmosphere
+scene.background = new THREE.Color(0x87CEEB); // Nice sky blue
+scene.fog = new THREE.FogExp2(0x87CEEB, 0.015); // Better, more natural volumetric-looking fog
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -31,10 +31,12 @@ for(let i=0; i<10; i++) {
     clouds.push(cloud);
 }
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true }); // Better z-fighting resolution
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
+renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
 
 // --- Selection Outline ---
@@ -48,18 +50,24 @@ scene.add(selectionOutline);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // slightly dimmer ambient
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.0); // warmer light
 directionalLight.position.set(100, 200, 50);
 directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.width = 2048;
-directionalLight.shadow.mapSize.height = 2048;
+directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
+directionalLight.shadow.mapSize.height = 4096;
+directionalLight.shadow.bias = -0.0005; // fix shadow acne
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 500;
-directionalLight.shadow.camera.left = -50;
-directionalLight.shadow.camera.right = 50;
-directionalLight.shadow.camera.top = 50;
-directionalLight.shadow.camera.bottom = -50;
+directionalLight.shadow.camera.left = -100; // expanded shadow area
+directionalLight.shadow.camera.right = 100;
+directionalLight.shadow.camera.top = 100;
+directionalLight.shadow.camera.bottom = -100;
 scene.add(directionalLight);
+
+// Hemisphere light for better outdoor lighting (blueish sky, greenish ground)
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+hemiLight.position.set(0, 200, 0);
+scene.add(hemiLight);
 
 // Texture Loader
 const textureLoader = new THREE.TextureLoader();
@@ -67,12 +75,12 @@ const textureLoader = new THREE.TextureLoader();
 // Materials Map
 export const blockMaterials = {
     grass: [
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // right
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // left
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // right
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // left
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_top')) }), // top
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // bottom
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // front
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) })  // back
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // front
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) })  // back
     ],
     dirt: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),
     stone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('stone')) }),
@@ -332,18 +340,20 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
         }
 
         // Generate deep world layer by layer
-        for (let currentY = worldDepth; currentY <= y; currentY++) {
+        // y is offset by 0.5 (e.g. 2.5), so the highest integer currentY reaches is Math.floor(y) = y - 0.5.
+        const topY = y - 0.5;
+        for (let currentY = worldDepth; currentY <= topY; currentY++) {
             let blockType = 'stone';
 
             // Bottom layer
             if (currentY === worldDepth) {
                 blockType = 'bedrock';
-            } else if (currentY === y) {
+            } else if (currentY === topY) {
                 // Surface
                 blockType = surfaceBlock;
-            } else if (currentY > y - 4 && surfaceBlock === 'grass') {
+            } else if (currentY > topY - 3 && surfaceBlock === 'grass') {
                 blockType = 'dirt';
-            } else if (currentY > y - 3 && surfaceBlock === 'sand') {
+            } else if (currentY > topY - 2 && surfaceBlock === 'sand') {
                 blockType = 'sand';
             } else {
                 // Stone layer - check for caves and ores
@@ -366,20 +376,17 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
         }
 
         // Generate Water
-        const waterLevel = -3.5;
-        for (let currentY = Math.ceil(waterLevel); currentY <= Math.floor(y); currentY++) {
-            // we're below surface, already generated blocks above
-        }
+        const waterLevel = -3; // Needs to be integer
         // Fill water up to waterLevel if surface is below it
-        for(let wy = y + 1; wy <= waterLevel; wy++) {
+        for(let wy = topY + 1; wy <= waterLevel; wy++) {
             setVoxelData(x, wy, z, 'water');
         }
 
         // Procedural Trees (spawn only on grass, 2% chance)
-        if (surfaceBlock === 'grass' && y >= waterLevel && Math.random() < 0.02) {
+        if (surfaceBlock === 'grass' && topY >= waterLevel && Math.random() < 0.02) {
             const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
             for (let i = 1; i <= treeHeight; i++) {
-                setVoxelData(x, y + i, z, 'wood');
+                setVoxelData(x, topY + i, z, 'wood');
             }
             // Leaves
             for (let lx = -2; lx <= 2; lx++) {
