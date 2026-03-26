@@ -24,6 +24,7 @@ export function generateTexture(type) {
         gold_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#fcee4b', '#e6d845'],
         diamond_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#4aedd8', '#42d6c3'],
         water: ['#3e6db5', '#335c9a', '#4c86d1'], // Water blues
+        lava: ['#e85f1c', '#f58727', '#d63c0f', '#fce230'], // Lava reds/oranges
         bedrock: ['#333333', '#222222', '#111111', '#444444', '#000000'] // Very dark scattered
     };
 

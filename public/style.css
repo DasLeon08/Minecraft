@@ -52,51 +52,107 @@ body {
     text-align: center;
 }
 
-#hotbar {
+#hud-container {
     position: absolute;
-    bottom: 20px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 5px;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 5px;
-    border-radius: 5px;
+    flex-direction: column;
+    align-items: center;
     z-index: 5;
+    width: 364px; /* 9 slots * 40px + 4px borders */
+}
+
+#status-bars {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+.status-bar {
+    display: flex;
+    gap: 2px;
+}
+
+.heart, .hunger {
+    width: 18px;
+    height: 18px;
+    background-size: cover;
+    image-rendering: pixelated;
+}
+
+/* We will use inline SVG data URIs for hearts and hunger */
+.heart {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M1 2h2v1h-2zm2-1h2v1h-2zm2 0h2v1h-2zm2 1h2v1h-2zm-8 1h9v1h-9zm0 1h9v1h-9zm1 1h7v1h-7zm1 1h5v1h-5zm1 1h3v1h-3zm1 1h1v1h-1z"/><path fill="%23f00" d="M1 3h1v1h-1zm1-1h1v1h-1zm2 0h1v1h-1zm2 0h1v1h-1zm1 1h1v1h-1zm-7 1h7v1h-7zm1 1h5v1h-5zm1 1h3v1h-3zm1 1h1v1h-1z"/></svg>');
+}
+.heart.half {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M1 2h2v1h-2zm2-1h2v1h-2zm2 0h2v1h-2zm2 1h2v1h-2zm-8 1h9v1h-9zm0 1h9v1h-9zm1 1h7v1h-7zm1 1h5v1h-5zm1 1h3v1h-3zm1 1h1v1h-1z"/><path fill="%23f00" d="M1 3h1v1h-1zm1-1h1v1h-1zm-1 1h4v1h-4zm1 1h3v1h-3zm1 1h2v1h-2zm1 1h1v1h-1z"/></svg>');
+}
+.heart.empty {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M1 2h2v1h-2zm2-1h2v1h-2zm2 0h2v1h-2zm2 1h2v1h-2zm-8 1h9v1h-9zm0 1h9v1h-9zm1 1h7v1h-7zm1 1h5v1h-5zm1 1h3v1h-3zm1 1h1v1h-1z"/><path fill="%23fff" d="M1 3h1v1h-1zm1-1h1v1h-1zm2 0h1v1h-1zm2 0h1v1h-1zm1 1h1v1h-1zm-7 1h7v1h-7zm1 1h5v1h-5zm1 1h3v1h-3zm1 1h1v1h-1z"/></svg>');
+}
+
+.hunger {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M4 1h3v1h-3zm3 1h1v1h-1zm1 1h1v2h-1zm-1 2h1v1h-1zm-1 1h1v1h-1zm-4 1h4v1h-4zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1-2h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1zm1-1h1v1h-1z"/><path fill="%23a65" d="M4 2h2v1h-2zm2 1h1v2h-1zm-1 2h1v1h-1zm-3 1h3v1h-3zm-1-1h1v1h-1zm-1-2h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1z"/></svg>');
+}
+.hunger.half {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M4 1h3v1h-3zm3 1h1v1h-1zm1 1h1v2h-1zm-1 2h1v1h-1zm-1 1h1v1h-1zm-4 1h4v1h-4zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1-2h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1zm1-1h1v1h-1z"/><path fill="%23a65" d="M2 4h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1zm-1 3h1v1h-1z"/></svg>');
+}
+.hunger.empty {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><path fill="%23000" d="M4 1h3v1h-3zm3 1h1v1h-1zm1 1h1v2h-1zm-1 2h1v1h-1zm-1 1h1v1h-1zm-4 1h4v1h-4zm-1-1h1v1h-1zm-1-1h1v1h-1zm-1-2h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1zm1-1h1v1h-1z"/><path fill="%23888" d="M4 2h2v1h-2zm2 1h1v2h-1zm-1 2h1v1h-1zm-3 1h3v1h-3zm-1-1h1v1h-1zm-1-2h1v2h-1zm1-1h1v1h-1zm1-1h1v1h-1z"/></svg>');
+}
+
+#hotbar {
+    display: flex;
+    background: rgba(139, 139, 139, 0.9);
+    padding: 2px;
+    border: 2px solid #333;
+    border-radius: 2px;
 }
 
 .hotbar-slot {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border: 2px solid #555;
-    background-color: #333;
+    background-color: #8b8b8b;
+    border-top-color: #a8a8a8;
+    border-left-color: #a8a8a8;
+    border-bottom-color: #555;
+    border-right-color: #555;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
     position: relative;
     user-select: none;
+    box-sizing: border-box;
 }
 
 .hotbar-slot.active {
-    border-color: #fff;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    border: 2px solid #fff;
+    box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.8), 0 0 4px rgba(255, 255, 255, 0.8);
+    background-color: #9f9f9f;
 }
 
 .hotbar-slot img {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     image-rendering: pixelated;
     pointer-events: none;
+    z-index: 2;
 }
 
 .slot-number {
     position: absolute;
-    bottom: 2px;
-    right: 4px;
+    bottom: 0px;
+    right: 2px;
     color: white;
-    font-size: 12px;
-    text-shadow: 1px 1px 0 #000;
+    font-size: 10px;
+    font-weight: bold;
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+    z-index: 3;
 }
 
 #inventory {

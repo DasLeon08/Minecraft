@@ -6,7 +6,7 @@ const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
-    'water', 'bedrock'
+    'water', 'lava', 'bedrock'
 ];
 const hotbarSlots = new Array(9).fill(null);
 // Initialize hotbar with some default items
@@ -213,7 +213,55 @@ closeInvBtn.addEventListener('click', () => {
     // We will trigger unlock natively via game.js keydown instead
 });
 
+// Health and Hunger
+let health = 20; // 20 half-hearts (10 full hearts)
+let hunger = 20; // 20 half-shanks (10 full shanks)
+
+const healthBarEl = document.getElementById('health-bar');
+const hungerBarEl = document.getElementById('hunger-bar');
+
+function renderStatusBars() {
+    healthBarEl.innerHTML = '';
+    hungerBarEl.innerHTML = '';
+
+    // Render 10 hearts
+    for (let i = 0; i < 10; i++) {
+        const heart = document.createElement('div');
+        const heartValue = (i + 1) * 2;
+        if (health >= heartValue) {
+            heart.className = 'heart';
+        } else if (health === heartValue - 1) {
+            heart.className = 'heart half';
+        } else {
+            heart.className = 'heart empty';
+        }
+        healthBarEl.appendChild(heart);
+    }
+
+    // Render 10 hunger shanks (right-to-left visual order is usually handled by flex-direction or just appending normally)
+    for (let i = 0; i < 10; i++) {
+        const shank = document.createElement('div');
+        const shankValue = (i + 1) * 2;
+        if (hunger >= shankValue) {
+            shank.className = 'hunger';
+        } else if (hunger === shankValue - 1) {
+            shank.className = 'hunger half';
+        } else {
+            shank.className = 'hunger empty';
+        }
+        hungerBarEl.appendChild(shank);
+    }
+}
+
+// Optional: expose a method to update health/hunger from game.js
+export function updatePlayerStatus(newHealth, newHunger) {
+    if (newHealth !== undefined) health = Math.max(0, Math.min(20, newHealth));
+    if (newHunger !== undefined) hunger = Math.max(0, Math.min(20, newHunger));
+    renderStatusBars();
+}
+
 // Init
 renderHotbar();
+renderStatusBars();
 setupInventoryItems();
 selectHotbarSlot(0);

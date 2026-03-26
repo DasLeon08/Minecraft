@@ -101,7 +101,9 @@ export const blockMaterials = {
     coal_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('coal_ore')) }),
     iron_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('iron_ore')) }),
     gold_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('gold_ore')) }),
-    diamond_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('diamond_ore')) })
+    diamond_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('diamond_ore')) }),
+    water: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('water')), transparent: true, opacity: 0.8 }),
+    lava: new THREE.MeshBasicMaterial({ map: textureLoader.load(generateTexture('lava')) }) // Lava emits light visually so use Basic
 };
 
 // Set nearest filter for pixel art look
@@ -180,8 +182,15 @@ const onKeyDown = (event) => {
                 moveRight = true;
                 break;
             case 'Space':
-                if (canJump === true) velocity.y += 10;
-                canJump = false;
+                // Check if in liquid for swimming
+                const pPosJump = controls.getObject().position;
+                const typeJump = getVoxelData(Math.floor(pPosJump.x), Math.floor(pPosJump.y - 0.5), Math.floor(pPosJump.z));
+                if (typeJump === 'water' || typeJump === 'lava') {
+                    velocity.y = 5; // Swim up
+                } else if (canJump === true) {
+                    velocity.y += 10;
+                    canJump = false;
+                }
                 break;
             case 'Digit1': UI.selectHotbarSlot(0); break;
             case 'Digit2': UI.selectHotbarSlot(1); break;
@@ -239,7 +248,7 @@ const renderedBlocks = new Map(); // x,y,z -> THREE.Mesh
 const worldSize = 64; // 64x64 blocks
 const worldDepth = -30; // generate down to this y-level
 
-const transparentBlocks = ['glass', 'leaves', 'water'];
+const transparentBlocks = ['glass', 'leaves', 'water', 'lava'];
 
 function getBlockKey(x, y, z) {
     return `${x},${y},${z}`;
@@ -359,6 +368,10 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
                 // Stone layer - check for caves and ores
                 const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
                 if (caveNoise > 0.65) {
+                    // Lava pools at bottom of caves if very deep
+                    if (currentY < worldDepth + 5 && currentY > worldDepth) {
+                        setVoxelData(x, currentY, z, 'lava');
+                    }
                     continue; // Cave (air)
                 }
 
@@ -621,18 +634,29 @@ function animate() {
     if (controls.isLocked === true) {
         const delta = (time - prevTime) / 1000;
 
+        // Check if player is in liquid
+        const pPos = controls.getObject().position;
+        const currentBlockType = getVoxelData(Math.floor(pPos.x), Math.floor(pPos.y - 0.5), Math.floor(pPos.z));
+        const inLiquid = currentBlockType === 'water' || currentBlockType === 'lava';
+
         // Apply friction
-        velocity.x -= velocity.x * 10.0 * delta;
-        velocity.z -= velocity.z * 10.0 * delta;
+        const friction = inLiquid ? 2.0 : 10.0; // Less friction in water/lava, but speed is slower
+        velocity.x -= velocity.x * friction * delta;
+        velocity.z -= velocity.z * friction * delta;
 
         // Apply gravity
-        velocity.y -= 9.8 * 3.0 * delta;
+        const gravity = inLiquid ? 3.0 : 9.8 * 3.0;
+        velocity.y -= gravity * delta;
+
+        // Terminal velocity in liquid
+        if (inLiquid && velocity.y < -2.0) velocity.y = -2.0;
+
 
         direction.z = Number(moveForward) - Number(moveBackward);
         direction.x = Number(moveRight) - Number(moveLeft);
         direction.normalize(); // Ensure consistent movement in all directions
 
-        const speed = 50.0;
+        let speed = inLiquid ? 150.0 : 400.0; // Slower movement in liquid
         if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
         if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
 
@@ -667,7 +691,7 @@ function animate() {
                 for (let by = py - 2; by <= py + 2; by++) {
                     for (let bz = pz - 1; bz <= pz + 1; bz++) {
                         const type = getVoxelData(bx, by + 0.5, bz); // y is stored as n.5
-                        if (type && type !== 'water') { // water is non-solid
+                        if (type && type !== 'water' && type !== 'lava') { // water and lava are non-solid
                             const blockBox = new THREE.Box3().setFromCenterAndSize(
                                 new THREE.Vector3(bx, by + 0.5, bz),
                                 new THREE.Vector3(1, 1, 1)
