@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { generateTexture } from './textures.js';
 import * as UI from './ui.js';
+import { noise } from './noise.js';
 
 const socket = io(); // Connect to Socket.IO
 
@@ -57,7 +58,16 @@ export const blockMaterials = {
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // front
         new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) })  // back
     ],
-    planks: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('planks')) })
+    planks: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('planks')) }),
+    leaves: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('leaves')), transparent: true, alphaTest: 0.1 }),
+    sand: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('sand')) }),
+    glass: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('glass')), transparent: true, opacity: 0.8 }),
+    cobblestone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('cobblestone')) }),
+    brick: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('brick')) }),
+    coal_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('coal_ore')) }),
+    iron_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('iron_ore')) }),
+    gold_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('gold_ore')) }),
+    diamond_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('diamond_ore')) })
 };
 
 // Set nearest filter for pixel art look
@@ -186,31 +196,77 @@ const onKeyUp = (event) => {
 document.addEventListener('keydown', onKeyDown);
 document.addEventListener('keyup', onKeyUp);
 
-// --- Terrain (Voxel Generation) ---
+// --- Procedural Terrain Generation ---
 const geometry = new THREE.BoxGeometry(1, 1, 1);
-
-const worldSize = 30; // 30x30 blocks
 const objects = []; // Store blocks for collision/raycasting
+
+const worldSize = 40; // 40x40 blocks
+
+function createBlock(type, x, y, z) {
+    const material = blockMaterials[type] || blockMaterials['dirt'];
+    const voxel = new THREE.Mesh(geometry, material);
+    voxel.position.set(x, y, z);
+    voxel.receiveShadow = true;
+    voxel.castShadow = true;
+    voxel.userData.type = type;
+    scene.add(voxel);
+    objects.push(voxel);
+}
 
 for (let x = -worldSize / 2; x < worldSize / 2; x++) {
     for (let z = -worldSize / 2; z < worldSize / 2; z++) {
-        const voxel = new THREE.Mesh(geometry, blockMaterials['grass']);
-        voxel.position.set(Math.round(x), -0.5, Math.round(z)); // Center of block is 0, so -0.5 makes top flush with 0
-        voxel.receiveShadow = true;
-        voxel.castShadow = true;
-        voxel.userData.type = 'grass';
-        scene.add(voxel);
-        objects.push(voxel);
+        // Heightmap via 2D noise
+        // Smooth rolling hills, amplitude ~5
+        const noiseVal = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0);
+        const y = Math.floor(noiseVal * 10) - 5 + 0.5; // Offset to n.5 so top is at integer
 
-        // Add a layer of dirt underneath
-        const dirt = new THREE.Mesh(geometry, blockMaterials['dirt']);
-        dirt.position.set(Math.round(x), -1.5, Math.round(z));
-        dirt.receiveShadow = true;
-        dirt.userData.type = 'dirt';
-        scene.add(dirt);
-        objects.push(dirt);
+        // Determine surface block type
+        let surfaceBlock = 'grass';
+        if (y < -3.5) {
+            surfaceBlock = 'sand'; // Beach/ocean floor level
+        } else if (y > 2.5) {
+            surfaceBlock = 'stone'; // Mountain tops
+        }
+
+        // Add top block
+        createBlock(surfaceBlock, x, y, z);
+
+        // Add some depth (dirt or stone)
+        if (surfaceBlock === 'grass') {
+            createBlock('dirt', x, y - 1, z);
+            createBlock('stone', x, y - 2, z);
+        } else if (surfaceBlock === 'sand') {
+            createBlock('sand', x, y - 1, z);
+            createBlock('stone', x, y - 2, z);
+        } else {
+            createBlock('stone', x, y - 1, z);
+            createBlock('stone', x, y - 2, z);
+        }
+
+        // Procedural Trees (spawn only on grass, 5% chance)
+        if (surfaceBlock === 'grass' && Math.random() < 0.05) {
+            const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
+            for (let i = 1; i <= treeHeight; i++) {
+                createBlock('wood', x, y + i, z);
+            }
+            // Leaves
+            for (let lx = -2; lx <= 2; lx++) {
+                for (let lz = -2; lz <= 2; lz++) {
+                    for (let ly = 0; ly <= 1; ly++) {
+                        if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 1) continue; // rounded corners
+                        if (lx === 0 && lz === 0 && ly === 0) continue; // trunk space
+                        createBlock('leaves', x + lx, y + treeHeight - 1 + ly, z + lz);
+                    }
+                }
+            }
+        }
     }
 }
+
+// Adjust camera spawn height based on terrain center
+const spawnNoise = noise.fbm2D(0, 0, 4, 0.5, 2.0);
+const spawnY = Math.floor(spawnNoise * 10) - 5 + 2.5;
+camera.position.set(0, spawnY, 0);
 
 // --- Multiplayer Setup ---
 const otherPlayers = {};
@@ -253,6 +309,63 @@ socket.on('playerMoved', (playerInfo) => {
         otherPlayers[playerInfo.id].position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
         // Add rotation sync here later if needed
     }
+});
+
+// --- Mobs Rendering ---
+const renderedMobs = {};
+const mobGeometries = {
+    pig: new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    zombie: new THREE.BoxGeometry(0.8, 1.8, 0.8),
+    cow: new THREE.BoxGeometry(1.2, 1.2, 1.2),
+    creeper: new THREE.BoxGeometry(0.8, 1.6, 0.8)
+};
+const mobMaterials = {
+    pig: new THREE.MeshLambertMaterial({ color: 0xFFC0CB }),
+    zombie: new THREE.MeshLambertMaterial({ color: 0x006400 }),
+    cow: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+    creeper: new THREE.MeshLambertMaterial({ color: 0x00FF00 })
+};
+
+socket.on('mobsUpdate', (serverMobs) => {
+    const mobRaycaster = new THREE.Raycaster();
+    const downVector = new THREE.Vector3(0, -1, 0);
+
+    // Update or add
+    Object.keys(serverMobs).forEach(id => {
+        const mobData = serverMobs[id];
+        let mesh = renderedMobs[id];
+
+        if (!mesh) {
+            mesh = new THREE.Mesh(mobGeometries[mobData.type], mobMaterials[mobData.type]);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            renderedMobs[id] = mesh;
+            mesh.position.set(mobData.position.x, mobData.position.y, mobData.position.z);
+        } else {
+            // Smoothly move towards target in animation loop later, but hard snap for now
+            mesh.position.x = mobData.position.x;
+            mesh.position.z = mobData.position.z;
+        }
+
+        // Snap to ground
+        mobRaycaster.set(new THREE.Vector3(mesh.position.x, 50, mesh.position.z), downVector);
+        const intersects = mobRaycaster.intersectObjects(objects, false);
+        if (intersects.length > 0) {
+            // Place mob exactly on top of block.
+            // e.g., if geometry is 1.8 high, center is at +0.9 from ground
+            const heightHalf = mesh.geometry.parameters.height / 2;
+            mesh.position.y = intersects[0].point.y + heightHalf;
+        }
+    });
+
+    // Remove dead/missing
+    Object.keys(renderedMobs).forEach(id => {
+        if (!serverMobs[id]) {
+            scene.remove(renderedMobs[id]);
+            delete renderedMobs[id];
+        }
+    });
 });
 
 // Sync initial world state

@@ -15,6 +15,49 @@ const players = {};
 // Map key: "x,y,z", value: type (e.g., 'add')
 const worldBlocks = new Map();
 
+// --- Server-Side Mobs ---
+const mobs = {};
+const mobTypes = ['pig', 'zombie', 'cow', 'creeper'];
+
+function spawnMob() {
+    const id = Math.random().toString(36).substr(2, 9);
+    mobs[id] = {
+        id: id,
+        type: mobTypes[Math.floor(Math.random() * mobTypes.length)],
+        // Spawn randomly within the 40x40 world
+        position: {
+            x: Math.floor(Math.random() * 30) - 15,
+            y: 10, // Drop from sky
+            z: Math.floor(Math.random() * 30) - 15
+        },
+        targetPosition: null
+    };
+}
+
+// Initial mobs
+for (let i = 0; i < 5; i++) {
+    spawnMob();
+}
+
+// Mob wandering loop
+setInterval(() => {
+    Object.values(mobs).forEach(mob => {
+        // Move randomly
+        if (Math.random() < 0.2) {
+            mob.position.x += (Math.random() * 2) - 1;
+            mob.position.z += (Math.random() * 2) - 1;
+
+            // basic bounds check
+            if(mob.position.x > 20) mob.position.x = 20;
+            if(mob.position.x < -20) mob.position.x = -20;
+            if(mob.position.z > 20) mob.position.z = 20;
+            if(mob.position.z < -20) mob.position.z = -20;
+        }
+    });
+    // Broadcast mob positions
+    io.emit('mobsUpdate', mobs);
+}, 1000); // 1 tick per second for simple prototype
+
 io.on('connection', (socket) => {
     console.log('a user connected:', socket.id);
 
@@ -27,6 +70,7 @@ io.on('connection', (socket) => {
 
     // Send current players and world state to the new client
     socket.emit('currentPlayers', players);
+    socket.emit('mobsUpdate', mobs);
     // Convert map to array for initial sync
     const currentWorld = Array.from(worldBlocks.entries()).map(([key, value]) => {
         const [x, y, z] = key.split(',').map(Number);

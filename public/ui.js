@@ -2,7 +2,11 @@ import { generateTexture } from './textures.js';
 import { setActiveBlock } from './game.js';
 
 // Available item types for the UI
-const availableItems = ['grass', 'dirt', 'stone', 'wood', 'planks'];
+const availableItems = [
+    'grass', 'dirt', 'stone', 'wood', 'planks',
+    'leaves', 'sand', 'glass', 'cobblestone', 'brick',
+    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore'
+];
 const hotbarSlots = new Array(9).fill(null);
 // Initialize hotbar with some default items
 hotbarSlots[0] = 'dirt';
@@ -103,31 +107,51 @@ function setupInventoryItems() {
 // Setup Crafting Area
 const craftingGrid = [null, null, null, null];
 
+const recipes = {
+    // pattern: string representing grid -> result
+    // We just do simple count-based recipes for prototype
+    'wood': 'planks',
+    'sand': 'glass', // normally furnace, but simple crafting here
+    'stone': 'cobblestone',
+    'cobblestone,cobblestone': 'brick', // generic recipe to get brick
+};
+
 function updateCrafting() {
-    // Simple logic: if any slot has 'wood', result is 'planks'. Otherwise nothing.
-    let hasWood = false;
-    let onlyWood = true;
+    let counts = {};
     let empty = true;
 
     craftingGrid.forEach(slot => {
         if (slot !== null) {
             empty = false;
-            if (slot === 'wood') hasWood = true;
-            else onlyWood = false;
+            counts[slot] = (counts[slot] || 0) + 1;
         }
     });
 
     craftResult.innerHTML = '';
 
-    if (!empty && hasWood && onlyWood) {
-        // Provide planks!
+    if (empty) return;
+
+    // Determine recipe match
+    let resultItem = null;
+
+    if (counts['wood'] && Object.keys(counts).length === 1) {
+        resultItem = 'planks';
+    } else if (counts['sand'] && Object.keys(counts).length === 1) {
+        resultItem = 'glass';
+    } else if (counts['stone'] && Object.keys(counts).length === 1) {
+        resultItem = 'cobblestone';
+    } else if (counts['cobblestone'] === 2 && Object.keys(counts).length === 1) {
+        resultItem = 'brick';
+    }
+
+    if (resultItem) {
         const img = document.createElement('img');
-        img.src = textureCache['planks'];
+        img.src = textureCache[resultItem];
         img.draggable = true;
 
         img.addEventListener('dragstart', (e) => {
-            draggedItem = 'planks';
-            e.dataTransfer.setData('text/plain', 'planks');
+            draggedItem = resultItem;
+            e.dataTransfer.setData('text/plain', resultItem);
             // When dragged out, consume materials
             setTimeout(() => {
                 craftingGrid.fill(null);
@@ -155,7 +179,7 @@ craftSlots.forEach((slot, i) => {
     slot.addEventListener('dragover', e => e.preventDefault());
     slot.addEventListener('drop', e => {
         e.preventDefault();
-        if (draggedItem && draggedItem !== 'planks') { // simple prevent drop planks back
+        if (draggedItem) { // allow anything, simplified prototype
             craftingGrid[i] = draggedItem;
             renderCraftingGrid();
             updateCrafting();
