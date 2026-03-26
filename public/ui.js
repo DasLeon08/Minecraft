@@ -1,17 +1,23 @@
-import { generateTexture } from './textures.js';
+import { generateTexture, generateIsometricBlockIcon, generateToolIcon } from './textures.js';
 import { setActiveBlock } from './game.js';
 
 // Available item types for the UI
-const availableItems = [
+export const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
     'water', 'lava', 'bedrock', 'snow', 'snow_dirt'
 ];
+
+export const availableTools = [
+    'stick', 'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'gold_pickaxe', 'diamond_pickaxe',
+    'wooden_axe', 'stone_axe', 'iron_axe', 'gold_axe', 'diamond_axe'
+];
+
 const hotbarSlots = new Array(9).fill(null);
 // Initialize hotbar with some default items
 hotbarSlots[0] = 'dirt';
-hotbarSlots[1] = 'grass';
+hotbarSlots[1] = 'wooden_pickaxe';
 hotbarSlots[2] = 'stone';
 hotbarSlots[3] = 'wood';
 
@@ -28,15 +34,36 @@ let draggedItem = null; // What are we currently dragging
 let draggedElement = null;
 
 // Cache generated data URLs so we don't recreate canvases every click
-const textureCache = {};
-availableItems.forEach(type => {
-    // For blocks with multiple sides, just use the main texture or top
-    let texType = type;
-    if (type === 'grass') texType = 'grass_top';
-    if (type === 'wood') texType = 'wood_side';
-    if (type === 'snow_dirt') texType = 'dirt_snow_side';
-    textureCache[type] = generateTexture(texType);
-});
+export const textureCache = {};
+export const isoTextureCache = {};
+
+// We use an async setup to generate the 3D icons because they require canvas composition
+async function preloadTextures() {
+    // Pre-generate standard 2D textures first
+    const typesToGen = [...availableItems, 'grass_top', 'grass_side', 'wood_top', 'wood_side', 'dirt_snow_side', 'snow'];
+    typesToGen.forEach(type => {
+        textureCache[type] = generateTexture(type);
+    });
+
+    availableTools.forEach(tool => {
+        isoTextureCache[tool] = generateToolIcon(tool);
+    });
+
+    // Generate 3D isometric icons
+    for (const type of availableItems) {
+        let top = type, side = type, front = type;
+        if (type === 'grass') { top = 'grass_top'; side = 'grass_side'; front = 'grass_side'; }
+        if (type === 'wood') { top = 'wood_top'; side = 'wood_side'; front = 'wood_side'; }
+        if (type === 'snow_dirt') { top = 'snow'; side = 'dirt_snow_side'; front = 'dirt_snow_side'; }
+
+        isoTextureCache[type] = await generateIsometricBlockIcon(textureCache[top], textureCache[side], textureCache[front]);
+    }
+
+    renderHotbar();
+    renderStatusBars();
+    setupInventoryItems();
+    selectHotbarSlot(0);
+}
 
 // Setup Hotbar UI
 function renderHotbar() {
@@ -53,7 +80,7 @@ function renderHotbar() {
 
         if (hotbarSlots[i]) {
             const img = document.createElement('img');
-            img.src = textureCache[hotbarSlots[i]];
+            img.src = isoTextureCache[hotbarSlots[i]] || textureCache[hotbarSlots[i]];
             slot.appendChild(img);
         }
 
@@ -87,13 +114,14 @@ export function selectHotbarSlot(index) {
 
 // Setup Inventory available items
 function setupInventoryItems() {
-    availableItems.forEach(item => {
+    const allItems = [...availableItems, ...availableTools];
+    allItems.forEach(item => {
         const div = document.createElement('div');
         div.className = 'inv-item';
         div.draggable = true;
 
         const img = document.createElement('img');
-        img.src = textureCache[item];
+        img.src = isoTextureCache[item] || textureCache[item];
         div.appendChild(img);
 
         div.addEventListener('dragstart', (e) => {
@@ -106,48 +134,67 @@ function setupInventoryItems() {
 }
 
 // Setup Crafting Area
-const craftingGrid = [null, null, null, null];
+const craftingGrid = new Array(9).fill(null);
 
-const recipes = {
-    // pattern: string representing grid -> result
-    // We just do simple count-based recipes for prototype
-    'wood': 'planks',
-    'sand': 'glass', // normally furnace, but simple crafting here
-    'stone': 'cobblestone',
-    'cobblestone,cobblestone': 'brick', // generic recipe to get brick
-};
+function getCraftingShape() {
+    // Convert 3x3 to a compact string array representation, stripping empty rows/cols
+    let gridStr = [];
+    for(let i=0; i<9; i+=3) {
+        gridStr.push(craftingGrid.slice(i, i+3).map(x => x || ' '));
+    }
+
+    // Remove empty top rows
+    while(gridStr.length > 0 && gridStr[0].every(x => x === ' ')) gridStr.shift();
+    // Remove empty bottom rows
+    while(gridStr.length > 0 && gridStr[gridStr.length-1].every(x => x === ' ')) gridStr.pop();
+
+    if (gridStr.length === 0) return null;
+
+    // Remove empty left columns
+    while(gridStr.every(row => row[0] === ' ')) {
+        gridStr.forEach(row => row.shift());
+    }
+    // Remove empty right columns
+    while(gridStr.every(row => row[row.length-1] === ' ')) {
+        gridStr.forEach(row => row.pop());
+    }
+
+    return gridStr.map(row => row.join(',')).join('|');
+}
 
 function updateCrafting() {
-    let counts = {};
-    let empty = true;
-
-    craftingGrid.forEach(slot => {
-        if (slot !== null) {
-            empty = false;
-            counts[slot] = (counts[slot] || 0) + 1;
-        }
-    });
-
     craftResult.innerHTML = '';
 
-    if (empty) return;
+    const shape = getCraftingShape();
+    if (!shape) return;
 
     // Determine recipe match
     let resultItem = null;
 
-    if (counts['wood'] && Object.keys(counts).length === 1) {
-        resultItem = 'planks';
-    } else if (counts['sand'] && Object.keys(counts).length === 1) {
-        resultItem = 'glass';
-    } else if (counts['stone'] && Object.keys(counts).length === 1) {
-        resultItem = 'cobblestone';
-    } else if (counts['cobblestone'] === 2 && Object.keys(counts).length === 1) {
-        resultItem = 'brick';
-    }
+    // Recipes based on exact shape after trimming
+    if (shape === 'wood') resultItem = 'planks';
+    else if (shape === 'sand') resultItem = 'glass';
+    else if (shape === 'stone') resultItem = 'cobblestone';
+    else if (shape === 'cobblestone,cobblestone') resultItem = 'brick'; // 1x2 or 2x1
+    else if (shape === 'planks|planks') resultItem = 'stick';
+
+    // Pickaxes
+    else if (shape === 'planks,planks,planks| ,stick, | ,stick, ') resultItem = 'wooden_pickaxe';
+    else if (shape === 'cobblestone,cobblestone,cobblestone| ,stick, | ,stick, ') resultItem = 'stone_pickaxe';
+    else if (shape === 'iron_ore,iron_ore,iron_ore| ,stick, | ,stick, ') resultItem = 'iron_pickaxe';
+    else if (shape === 'gold_ore,gold_ore,gold_ore| ,stick, | ,stick, ') resultItem = 'gold_pickaxe';
+    else if (shape === 'diamond_ore,diamond_ore,diamond_ore| ,stick, | ,stick, ') resultItem = 'diamond_pickaxe';
+
+    // Axes (handles left and right orientation)
+    else if (shape === 'planks,planks|planks,stick| ,stick' || shape === 'planks,planks|stick,planks|stick, ') resultItem = 'wooden_axe';
+    else if (shape === 'cobblestone,cobblestone|cobblestone,stick| ,stick' || shape === 'cobblestone,cobblestone|stick,cobblestone|stick, ') resultItem = 'stone_axe';
+    else if (shape === 'iron_ore,iron_ore|iron_ore,stick| ,stick' || shape === 'iron_ore,iron_ore|stick,iron_ore|stick, ') resultItem = 'iron_axe';
+    else if (shape === 'gold_ore,gold_ore|gold_ore,stick| ,stick' || shape === 'gold_ore,gold_ore|stick,gold_ore|stick, ') resultItem = 'gold_axe';
+    else if (shape === 'diamond_ore,diamond_ore|diamond_ore,stick| ,stick' || shape === 'diamond_ore,diamond_ore|stick,diamond_ore|stick, ') resultItem = 'diamond_axe';
 
     if (resultItem) {
         const img = document.createElement('img');
-        img.src = textureCache[resultItem];
+        img.src = isoTextureCache[resultItem] || textureCache[resultItem];
         img.draggable = true;
 
         img.addEventListener('dragstart', (e) => {
@@ -170,7 +217,7 @@ function renderCraftingGrid() {
         slot.innerHTML = '';
         if (craftingGrid[i]) {
             const img = document.createElement('img');
-            img.src = textureCache[craftingGrid[i]];
+            img.src = isoTextureCache[craftingGrid[i]] || textureCache[craftingGrid[i]];
             slot.appendChild(img);
         }
     });
@@ -209,8 +256,8 @@ export function toggleInventory(controls) {
 }
 
 // Health and Hunger
-let health = 20; // 20 half-hearts (10 full hearts)
-let hunger = 20; // 20 half-shanks (10 full shanks)
+export let health = 20; // 20 half-hearts (10 full hearts)
+export let hunger = 20; // 20 half-shanks (10 full shanks)
 
 const healthBarEl = document.getElementById('health-bar');
 const hungerBarEl = document.getElementById('hunger-bar');
@@ -255,8 +302,24 @@ export function updatePlayerStatus(newHealth, newHunger) {
     renderStatusBars();
 }
 
+export function addItemToInventory(type) {
+    // Check if it's already in the hotbar (simple prototype approach)
+    // We don't have quantity numbers yet, so just fill empty slots
+    let added = false;
+    for (let i = 0; i < 9; i++) {
+        if (!hotbarSlots[i]) {
+            hotbarSlots[i] = type;
+            added = true;
+            break;
+        } else if (hotbarSlots[i] === type) {
+            added = true; // "Stacked" visually for now
+            break;
+        }
+    }
+    if (added) {
+        renderHotbar();
+    }
+}
+
 // Init
-renderHotbar();
-renderStatusBars();
-setupInventoryItems();
-selectHotbarSlot(0);
+preloadTextures();

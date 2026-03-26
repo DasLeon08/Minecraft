@@ -18,12 +18,20 @@ scene.fog = new THREE.FogExp2(0x7ec0ee, 0.006); // Thinner fog, matches sky // R
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// --- Sun ---
+// --- Day / Night Cycle Setup ---
+let timeOfDay = 0; // 0 to Math.PI * 2
+const dayDuration = 600; // seconds for a full day/night cycle
+
+// --- Sun & Moon ---
 const sunGeo = new THREE.BoxGeometry(10, 10, 10);
 const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffcf0 }); // Bright warm white
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
-sunMesh.position.set(150, 300, 100); // Matches directional light
 scene.add(sunMesh);
+
+const moonGeo = new THREE.BoxGeometry(8, 8, 8);
+const moonMat = new THREE.MeshBasicMaterial({ color: 0xddddff }); // Pale blue white
+const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+scene.add(moonMesh);
 
 // --- Clouds ---
 const clouds = [];
@@ -80,7 +88,6 @@ const ambientLight = new THREE.AmbientLight(0xd9eaff, 0.45); // Cooler, softer a
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xfffaec, 2.0); // Warmer, brighter sunlight
-directionalLight.position.set(200, 300, 150);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
 directionalLight.shadow.mapSize.height = 4096;
@@ -250,7 +257,7 @@ const onKeyDown = (event) => {
         }
     }
 
-    if (event.code === 'KeyE') {
+    if (event.code === 'KeyE' && !isChatting) {
         if (controls.isLocked) {
             controls.unlock();
             inventoryEl.style.display = 'block';
@@ -258,6 +265,32 @@ const onKeyDown = (event) => {
             inventoryEl.style.display = 'none';
             controls.lock();
         }
+    }
+
+    if (event.code === 'KeyT' && controls.isLocked && !isChatting) {
+        controls.unlock();
+        isChatting = true;
+        chatInput.style.display = 'block';
+        chatInput.focus();
+        event.preventDefault(); // Prevent 't' from typing in input immediately
+    } else if (event.code === 'Enter' && isChatting) {
+        const msg = chatInput.value.trim();
+        if (msg) {
+            if (msg.startsWith('/')) {
+                socket.emit('chatCommand', msg);
+            } else {
+                socket.emit('chatMessage', msg);
+            }
+        }
+        chatInput.value = '';
+        chatInput.style.display = 'none';
+        isChatting = false;
+        controls.lock();
+    } else if (event.code === 'Escape' && isChatting) {
+        chatInput.value = '';
+        chatInput.style.display = 'none';
+        isChatting = false;
+        controls.lock();
     }
 };
 
@@ -398,7 +431,19 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
 
         const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
 
-        // Determine surface block type based on height
+        // Biome mapping via temperature/moisture 2D noise
+        // fbm2D returns 0 to 1, so we map it to -1 to 1 for our logic
+        const tempNoise = (noise.fbm2D(x * 0.02, z * 0.02, 3, 0.5, 2.0) * 2.0) - 1.0;
+        const moistureNoise = (noise.fbm2D(x * 0.02 + 100, z * 0.02 + 100, 3, 0.5, 2.0) * 2.0) - 1.0;
+
+        let biome = 'forest';
+        if (tempNoise > 0.3 && moistureNoise < 0.2) {
+            biome = 'desert';
+        } else if (tempNoise < -0.3) {
+            biome = 'snow';
+        }
+
+        // Determine surface block type based on height and biome
         let surfaceBlock = 'grass';
         if (y < -2.5) {
             surfaceBlock = 'sand'; // Beach/ocean floor level
@@ -408,6 +453,10 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
             surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
         } else if (y > 15.5) {
             surfaceBlock = 'stone'; // Rocky mountain sides
+        } else {
+            // Apply biome mapping
+            if (biome === 'desert') surfaceBlock = 'sand';
+            if (biome === 'snow') surfaceBlock = 'snow';
         }
 
         // Generate deep world layer by layer
@@ -424,8 +473,10 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
                 blockType = surfaceBlock;
             } else if (currentY > topY - 3 && surfaceBlock === 'grass') {
                 blockType = 'dirt';
-            } else if (currentY > topY - 2 && surfaceBlock === 'sand') {
+            } else if (currentY > topY - 3 && surfaceBlock === 'sand') {
                 blockType = 'sand';
+            } else if (currentY > topY - 3 && surfaceBlock === 'snow') {
+                blockType = 'dirt';
             } else {
                 // Stone layer - check for caves and ores
                 const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
@@ -457,19 +508,22 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
             setVoxelData(x, wy, z, 'water');
         }
 
-        // Procedural Trees (spawn only on grass, 2% chance)
-        if (surfaceBlock === 'grass' && topY >= waterLevel && Math.random() < 0.02) {
+        // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
+        const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
+        const treeChance = biome === 'forest' ? 0.05 : (biome === 'snow' ? 0.01 : 0.00); // No trees in desert
+        if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
             const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
             for (let i = 1; i <= treeHeight; i++) {
                 setVoxelData(x, topY + i, z, 'wood');
             }
             // Leaves
+            const leafType = biome === 'snow' ? 'leaves' : 'leaves'; // Maybe frosty leaves later
             for (let lx = -2; lx <= 2; lx++) {
                 for (let lz = -2; lz <= 2; lz++) {
                     for (let ly = 0; ly <= 1; ly++) {
                         if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 1) continue; // rounded corners
                         if (lx === 0 && lz === 0 && ly === 0) continue; // trunk space
-                        setVoxelData(x + lx, y + treeHeight - 1 + ly, z + lz, 'leaves');
+                        setVoxelData(x + lx, y + treeHeight - 1 + ly, z + lz, leafType);
                     }
                 }
             }
@@ -512,6 +566,20 @@ function removeOtherPlayer(playerId) {
     }
 }
 
+// Chat Events
+socket.on('chatMessage', (msg) => {
+    appendChatMessage(msg);
+});
+
+socket.on('chatCommandResponse', (msg) => {
+    appendChatMessage("[Server] " + msg);
+});
+
+socket.on('gamemodeUpdated', (mode) => {
+    setGamemode(mode);
+    appendChatMessage(`[Server] Your gamemode has been updated to ${['Survival', 'Creative', 'Spectator'][mode]}.`);
+});
+
 // Socket Events
 socket.on('currentPlayers', (players) => {
     Object.keys(players).forEach((id) => {
@@ -551,9 +619,25 @@ const mobMaterials = {
     creeper: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x00FF00 })
 };
 
-socket.on('mobsUpdate', (serverMobs) => {
+socket.on('mobDamage', (data) => {
+    if (currentGamemode === 0 && UI.health > 0) {
+        UI.updatePlayerStatus(UI.health - data.amount);
+        if (UI.health <= 0) {
+            socket.emit('chatMessage', `was slain by ${data.type}`);
+            controls.getObject().position.set(0, spawnY, 0); // respawn
+            UI.updatePlayerStatus(20, 20); // reset health
+        }
+    }
+});
+
+socket.on('serverTick', (data) => {
+    timeOfDay = data.timeOfDay;
+    const serverMobs = data.mobs;
+
     const mobRaycaster = new THREE.Raycaster();
     const downVector = new THREE.Vector3(0, -1, 0);
+
+    const syncYs = {}; // Store calculated Ys to send back to server
 
     // Update or add
     Object.keys(serverMobs).forEach(id => {
@@ -573,16 +657,29 @@ socket.on('mobsUpdate', (serverMobs) => {
             mesh.position.z = mobData.position.z;
         }
 
-        // Snap to ground
-        mobRaycaster.set(new THREE.Vector3(mesh.position.x, 50, mesh.position.z), downVector);
+        // Snap to ground starting slightly above the mob's actual Y to allow them inside caves
+        mobRaycaster.set(new THREE.Vector3(mesh.position.x, mesh.position.y + 1.0, mesh.position.z), downVector);
         const intersects = mobRaycaster.intersectObjects(objects, false);
         if (intersects.length > 0) {
             // Place mob exactly on top of block.
-            // e.g., if geometry is 1.8 high, center is at +0.9 from ground
             const heightHalf = mesh.geometry.parameters.height / 2;
-            mesh.position.y = intersects[0].point.y + heightHalf;
+            // Prevent teleporting down massive distances instantly, but let them fall smoothly if far
+            const targetY = intersects[0].point.y + heightHalf;
+            if (mesh.position.y - targetY > 2.0) {
+                mesh.position.y -= 0.4; // Fall quickly
+            } else {
+                mesh.position.y = targetY; // Snap
+            }
+        } else {
+            // If they are falling (no ground immediately below), let them drop a bit
+            mesh.position.y -= 0.4;
         }
+
+        syncYs[id] = mesh.position.y;
     });
+
+    // Send calculated Y positions back to server so the server knows their 3D distance
+    socket.emit('syncMobY', syncYs);
 
     // Remove dead/missing
     Object.keys(renderedMobs).forEach(id => {
@@ -626,8 +723,126 @@ export function setActiveBlock(type) {
     activeBlockType = type;
 }
 
+// Game Mode System (0: Survival, 1: Creative, 2: Spectator)
+export let currentGamemode = 0; // Default Survival
+
+export function setGamemode(mode) {
+    currentGamemode = mode;
+    console.log("Gamemode set to " + mode);
+}
+
+// Chat system
+export const chatInput = document.getElementById('chat-input');
+const chatMessages = document.getElementById('chat-messages');
+let isChatting = false;
+
+export function appendChatMessage(msgStr) {
+    const el = document.createElement('div');
+    el.className = 'chat-message';
+    el.innerText = msgStr;
+    chatMessages.appendChild(el);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    // keep only last 20 messages visually
+    while (chatMessages.children.length > 20) {
+        chatMessages.removeChild(chatMessages.firstChild);
+    }
+}
+
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(); // Always center (0,0) for pointer lock
+
+// Physical item drops
+const itemDrops = [];
+
+function spawnItemDrop(type, position) {
+    const isTool = UI.availableTools.includes(type);
+    let material;
+
+    if (isTool) {
+        // Sprite for tools
+        const map = new THREE.TextureLoader().load(UI.isoTextureCache[type] || UI.textureCache[type] || '');
+        map.magFilter = THREE.NearestFilter;
+        material = new THREE.SpriteMaterial({ map: map });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(0.5, 0.5, 0.5);
+        sprite.position.copy(position);
+        sprite.position.y += 0.25; // Pop up a bit
+        scene.add(sprite);
+
+        itemDrops.push({
+            mesh: sprite,
+            type: type,
+            velocity: new THREE.Vector3((Math.random()-0.5)*2, 2, (Math.random()-0.5)*2),
+            timeAlive: 0
+        });
+    } else {
+        // 3D Mini block
+        const materials = getMaterials(type);
+        const geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+        const mesh = new THREE.Mesh(geometry, materials);
+        mesh.position.copy(position);
+        scene.add(mesh);
+
+        itemDrops.push({
+            mesh: mesh,
+            type: type,
+            velocity: new THREE.Vector3((Math.random()-0.5)*2, 2, (Math.random()-0.5)*2),
+            timeAlive: 0
+        });
+    }
+}
+
+function updateItemDrops(delta) {
+    const playerPos = controls.getObject().position;
+    for (let i = itemDrops.length - 1; i >= 0; i--) {
+        const drop = itemDrops[i];
+        drop.timeAlive += delta;
+
+        // Physics
+        drop.velocity.y -= 9.8 * delta; // Gravity
+        drop.mesh.position.addScaledVector(drop.velocity, delta);
+
+        // Floor collision (simple, just stops at y=current block level)
+        const bx = Math.round(drop.mesh.position.x);
+        const by = Math.floor(drop.mesh.position.y);
+        const bz = Math.round(drop.mesh.position.z);
+        if (getVoxelData(bx, by, bz)) {
+            drop.mesh.position.y = by + 0.5 + (drop.mesh.geometry ? 0.125 : 0.25);
+            drop.velocity.x *= 0.5;
+            drop.velocity.z *= 0.5;
+            drop.velocity.y = 0;
+        }
+
+        // Rotation
+        if (drop.mesh.geometry) { // only rotate 3D blocks
+            drop.mesh.rotation.y += delta;
+        }
+
+        // Pickup collision
+        if (drop.timeAlive > 0.5 && drop.mesh.position.distanceTo(playerPos) < 1.5) {
+            // Add to inventory (we'll just call a UI function)
+            UI.addItemToInventory(drop.type);
+            scene.remove(drop.mesh);
+            itemDrops.splice(i, 1);
+        } else if (drop.timeAlive > 60) {
+            // Despawn after 60s
+            scene.remove(drop.mesh);
+            itemDrops.splice(i, 1);
+        }
+    }
+}
+
+function canHarvest(blockType, activeTool) {
+    if (currentGamemode === 1) return true; // Creative mode always harvests
+
+    const needsPickaxe = ['stone', 'cobblestone', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore'];
+    if (needsPickaxe.includes(blockType)) {
+        return activeTool && activeTool.includes('pickaxe');
+    }
+    // Simple for now: wood doesn't *require* an axe to drop, but breaks faster if we had breaking times.
+    // For this implementation, we just require the correct tool to get the item drop for hard materials.
+    return true;
+}
 
 document.addEventListener('mousedown', (event) => {
     if (controls.isLocked === true) {
@@ -641,12 +856,22 @@ document.addEventListener('mousedown', (event) => {
             // Left click (0) to remove, Right click (2) to place
             if (event.button === 0) {
                 // Remove block
+                if (currentGamemode === 2) return; // Spectator cannot break blocks
+
                 // Don't allow breaking bedrock
                 if (intersect.object !== scene && intersect.object.userData.type !== 'bedrock') {
                     const pos = intersect.object.position;
+                    const blockType = intersect.object.userData.type;
                     const x = Math.round(pos.x);
                     const y = pos.y;
                     const z = Math.round(pos.z);
+
+                    if (canHarvest(blockType, activeBlockType)) {
+                        // Spawn physical drop if in survival
+                        if (currentGamemode === 0) {
+                            spawnItemDrop(blockType, pos.clone());
+                        }
+                    }
 
                     worldData.delete(getBlockKey(x, y, z));
                     updateBlockVisibility(x, y, z);
@@ -697,10 +922,9 @@ function animate() {
     requestAnimationFrame(animate);
 
     const time = performance.now();
+    const delta = (time - prevTime) / 1000;
 
     if (controls.isLocked === true) {
-        const delta = (time - prevTime) / 1000;
-
         // Check if player is in liquid
         const pPos = controls.getObject().position;
         const currentBlockType = getVoxelData(Math.floor(pPos.x), Math.floor(pPos.y - 0.5), Math.floor(pPos.z));
@@ -774,12 +998,29 @@ function animate() {
         };
 
         // Y Collision (Gravity/Jumping)
+        const prevVelocityY = velocity.y;
         const hitY = checkCollisions();
         if (hitY) {
             if (velocity.y < 0) { // falling down
                 controls.getObject().position.y = hitY.max.y + (playerSize.y / 2);
                 velocity.y = 0;
                 canJump = true;
+
+                // Fall damage logic
+                if (currentGamemode === 0 && prevVelocityY < -15.0 && !inLiquid) {
+                    const fallDistance = Math.abs(prevVelocityY);
+                    // arbitrary scaling for fall damage based on velocity
+                    const damage = Math.floor((fallDistance - 15.0) / 2);
+                    if (damage > 0) {
+                        UI.updatePlayerStatus(UI.health - damage);
+                        if (UI.health <= 0) {
+                            // Player Death
+                            socket.emit('chatMessage', `fell from a high place`);
+                            controls.getObject().position.set(0, spawnY, 0); // respawn
+                            UI.updatePlayerStatus(20, 20); // reset health
+                        }
+                    }
+                }
             } else if (velocity.y > 0) { // jumping up into a block
                 controls.getObject().position.y = hitY.min.y - (playerSize.y / 2);
                 velocity.y = 0;
@@ -832,6 +1073,52 @@ function animate() {
             cloud.position.x = -100;
         }
     });
+
+    // --- Day/Night Cycle ---
+    // Smoothly interpolate time client-side between server ticks
+    timeOfDay += (delta / dayDuration) * Math.PI * 2;
+    if (timeOfDay > Math.PI * 2) timeOfDay -= Math.PI * 2;
+
+    const sunDist = 300;
+    // Calculate sun and moon positions
+    const sunY = Math.sin(timeOfDay) * sunDist;
+    const sunX = Math.cos(timeOfDay) * sunDist;
+    sunMesh.position.set(sunX, sunY, 100);
+
+    moonMesh.position.set(-sunX, -sunY, 100);
+
+    // Calculate light intensities based on sun height
+    const normalizedSunHeight = Math.sin(timeOfDay); // 1 = noon, 0 = sunrise/sunset, -1 = midnight
+
+    if (normalizedSunHeight > 0) {
+        // Day
+        directionalLight.position.copy(sunMesh.position);
+        directionalLight.intensity = Math.max(0.1, normalizedSunHeight * 2.0);
+        directionalLight.color.setHex(0xfffaec);
+        ambientLight.intensity = Math.max(0.1, normalizedSunHeight * 0.45);
+        hemiLight.intensity = Math.max(0.1, normalizedSunHeight * 0.7);
+
+        // Sky colors (Blue -> Orange at horizon -> Blue)
+        const skyR = Math.min(1.0, 0.49 + (1.0 - normalizedSunHeight) * 0.5); // Reddish at horizon
+        const skyG = Math.max(0.4, 0.75 - (1.0 - normalizedSunHeight) * 0.3);
+        const skyB = 0.93;
+        scene.background.setRGB(skyR, skyG, skyB);
+        scene.fog.color.setRGB(skyR, skyG, skyB);
+    } else {
+        // Night
+        directionalLight.position.copy(moonMesh.position);
+        directionalLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.3); // Dim moonlight
+        directionalLight.color.setHex(0xaaaaee);
+        ambientLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.1);
+        hemiLight.intensity = 0.05;
+
+        // Night Sky (Dark Blue/Black)
+        const depth = -normalizedSunHeight; // 0 to 1
+        scene.background.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
+        scene.fog.color.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
+    }
+
+    updateItemDrops(delta);
 
     prevTime = time;
 

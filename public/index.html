@@ -10,7 +10,12 @@
     <div id="crosshair"></div>
     <div id="instructions">
         Click to play<br/>
-        <span style="font-size:16px">WASD to move, Space to jump, Click to mine, Right-click to place. <br/>Press 'E' for inventory.</span>
+        <span style="font-size:16px">WASD to move, Space to jump, Click to mine, Right-click to place. <br/>Press 'E' for inventory. Press 'T' to chat.</span>
+    </div>
+
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <input type="text" id="chat-input" placeholder="Type a message or command (e.g. /gamemode 1)..." style="display: none;" autocomplete="off" />
     </div>
 
     <div id="hud-container">
@@ -35,6 +40,11 @@
                 <div class="craft-slot" data-index="1"></div>
                 <div class="craft-slot" data-index="2"></div>
                 <div class="craft-slot" data-index="3"></div>
+                <div class="craft-slot" data-index="4"></div>
+                <div class="craft-slot" data-index="5"></div>
+                <div class="craft-slot" data-index="6"></div>
+                <div class="craft-slot" data-index="7"></div>
+                <div class="craft-slot" data-index="8"></div>
             </div>
             <div id="crafting-arrow"></div>
             <div id="crafting-result" class="craft-slot result-slot"></div>

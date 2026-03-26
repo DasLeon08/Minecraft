@@ -1,3 +1,125 @@
+// Helper to draw isometric blocks for inventory
+export function generateIsometricBlockIcon(topSrc, sideSrc, frontSrc) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+
+    return new Promise((resolve) => {
+        let loaded = 0;
+        const topImg = new Image();
+        const sideImg = new Image();
+        const frontImg = new Image();
+
+        const onload = () => {
+            loaded++;
+            if (loaded === 3) {
+                // Draw Isometric Cube
+                ctx.save();
+
+                // Top Face
+                ctx.translate(16, 8);
+                ctx.scale(1, 0.5);
+                ctx.rotate(45 * Math.PI / 180);
+                ctx.drawImage(topImg, -11.3, -11.3, 22.6, 22.6);
+                ctx.restore();
+
+                // Left (Side) Face
+                ctx.save();
+                ctx.translate(16, 8);
+                ctx.transform(1, 0.5, 0, 1, 0, 0); // Skew Y
+                ctx.scale(0.707, 1);
+                // Draw slightly darker to fake shadow
+                ctx.filter = 'brightness(75%)';
+                ctx.drawImage(sideImg, -16, 0, 16, 16);
+                ctx.restore();
+
+                // Right (Front) Face
+                ctx.save();
+                ctx.translate(16, 8);
+                ctx.transform(1, -0.5, 0, 1, 0, 0); // Skew -Y
+                ctx.scale(0.707, 1);
+                ctx.filter = 'brightness(50%)'; // Darkest
+                ctx.drawImage(frontImg, 0, 0, 16, 16);
+                ctx.restore();
+
+                resolve(canvas.toDataURL('image/png'));
+            }
+        };
+
+        topImg.onload = sideImg.onload = frontImg.onload = onload;
+        topImg.src = topSrc;
+        sideImg.src = sideSrc;
+        frontImg.src = frontSrc;
+    });
+}
+
+// Generate simple 2D tool pixel art
+export function generateToolIcon(type) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+
+    // Colors
+    const stickColor = '#79553a';
+    const woodColor = '#a37e4d';
+    const stoneColor = '#8a8a8a';
+    const ironColor = '#d9d9d9';
+    const goldColor = '#fcee4b';
+    const diamondColor = '#4aedd8';
+
+    const drawPixel = (x, y, color) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 1, 1);
+    };
+
+    const drawStick = () => {
+        for (let i = 2; i <= 10; i++) {
+            drawPixel(i, 15 - i, stickColor);
+            drawPixel(i+1, 15 - i, '#5e4e35'); // shading
+        }
+    };
+
+    let headColor;
+    if (type.includes('wooden')) headColor = woodColor;
+    else if (type.includes('stone')) headColor = stoneColor;
+    else if (type.includes('iron')) headColor = ironColor;
+    else if (type.includes('gold')) headColor = goldColor;
+    else if (type.includes('diamond')) headColor = diamondColor;
+
+    if (type === 'stick') {
+        drawStick();
+    } else if (type.includes('pickaxe')) {
+        drawStick();
+        // Head
+        ctx.fillStyle = headColor;
+        ctx.fillRect(8, 2, 6, 2); // right side
+        ctx.fillRect(2, 8, 2, 6); // left side (rotated conceptually)
+        // Diagonal curve approximation
+        drawPixel(13, 3, headColor);
+        drawPixel(14, 4, headColor);
+        drawPixel(14, 5, headColor);
+        drawPixel(3, 13, headColor);
+        drawPixel(4, 14, headColor);
+        drawPixel(5, 14, headColor);
+        // Center bracket
+        ctx.fillStyle = '#444'; // binding
+        ctx.fillRect(10, 4, 2, 2);
+    } else if (type.includes('axe')) {
+        drawStick();
+        // Axe head
+        ctx.fillStyle = headColor;
+        ctx.fillRect(8, 2, 5, 5);
+        ctx.fillRect(10, 1, 3, 7);
+        // binding
+        ctx.fillStyle = '#444';
+        ctx.fillRect(9, 5, 2, 2);
+    }
+
+    return canvas.toDataURL('image/png');
+}
+
 // Texture generator using Canvas
 export function generateTexture(type) {
     const canvas = document.createElement('canvas');
