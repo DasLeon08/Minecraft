@@ -8,8 +8,8 @@ const socket = io(); // Connect to Socket.IO
 
 // Basic setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x5caeff); // Richer sky blue
-scene.fog = new THREE.FogExp2(0x5caeff, 0.008); // Reduced fog density for longer draw distance
+scene.background = new THREE.Color(0x7ec0ee); // More realistic sky blue // Richer sky blue
+scene.fog = new THREE.FogExp2(0x7ec0ee, 0.006); // Thinner fog, matches sky // Reduced fog density for longer draw distance
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -47,10 +47,10 @@ selectionOutline.visible = false;
 scene.add(selectionOutline);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Slightly brighter ambient
+const ambientLight = new THREE.AmbientLight(0xd9eaff, 0.4); // Cooler, softer ambient // Slightly brighter ambient
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.5); // Stronger warmer light
+const directionalLight = new THREE.DirectionalLight(0xfffaec, 1.8); // Warmer, brighter sunlight // Stronger warmer light
 directionalLight.position.set(150, 300, 100);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
@@ -65,55 +65,68 @@ directionalLight.shadow.camera.bottom = -200;
 scene.add(directionalLight);
 
 // Hemisphere light for better outdoor lighting (blueish sky, greenish ground)
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+const hemiLight = new THREE.HemisphereLight(0xe6f2ff, 0x334433, 0.6); // Sky blue to deep green ground bounce
 hemiLight.position.set(0, 200, 0);
 scene.add(hemiLight);
 
 // Texture Loader
+
+// Texture Loader with pixel-art settings
+
+// Texture Loader with pixel-art settings
 const textureLoader = new THREE.TextureLoader();
+function loadTex(name) {
+    const tex = textureLoader.load(generateTexture(name));
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
 
 // Materials Map
 export const blockMaterials = {
     grass: [
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // right
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // left
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_top')) }), // top
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // bottom
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) }), // front
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_side')) })  // back
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('grass_side') }), // right
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('grass_side') }), // left
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('grass_top') }), // top
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt') }), // bottom
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('grass_side') }), // front
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('grass_side') })  // back
     ],
     snow_dirt: [
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // right
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // left
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('snow')) }),  // top
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),       // bottom
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) }), // front
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt_snow_side')) })  // back
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt_snow_side') }), // right
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt_snow_side') }), // left
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('snow') }),  // top (slightly less rough)
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt') }),       // bottom
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt_snow_side') }), // front
+        new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dirt_snow_side') })  // back
     ],
-    snow: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('snow')) }),
-    dirt: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),
-    stone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('stone')) }),
+    snow: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('snow') }),
+    dirt: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('dirt') }),
+    stone: new THREE.MeshStandardMaterial({ roughness: 0.7, map: loadTex('stone') }),
     wood: [
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // right
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // left
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_top')) }), // top
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_top')) }), // bottom
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // front
-        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) })  // back
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_side') }), // right
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_side') }), // left
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_top') }), // top
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_top') }), // bottom
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_side') }), // front
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('wood_side') })  // back
     ],
-    planks: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('planks')) }),
-    leaves: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('leaves')), transparent: true, alphaTest: 0.1 }),
-    sand: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('sand')) }),
-    glass: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('glass')), transparent: true, opacity: 0.8 }),
-    cobblestone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('cobblestone')) }),
-    brick: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('brick')) }),
-    coal_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('coal_ore')) }),
-    iron_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('iron_ore')) }),
-    gold_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('gold_ore')) }),
-    diamond_ore: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('diamond_ore')) }),
-    water: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('water')), transparent: true, opacity: 0.8 }),
-    lava: new THREE.MeshBasicMaterial({ map: textureLoader.load(generateTexture('lava')) }) // Lava emits light visually so use Basic
+    planks: new THREE.MeshStandardMaterial({ roughness: 0.6, map: loadTex('planks') }),
+    leaves: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('leaves'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide }),
+    sand: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('sand') }),
+    glass: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.3, map: loadTex('glass'), transparent: true, opacity: 0.6 }),
+    cobblestone: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('cobblestone') }),
+    brick: new THREE.MeshStandardMaterial({ roughness: 0.7, map: loadTex('brick') }),
+    coal_ore: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('coal_ore') }),
+    iron_ore: new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.2, map: loadTex('iron_ore') }),
+    gold_ore: new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.4, map: loadTex('gold_ore') }),
+    diamond_ore: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.5, map: loadTex('diamond_ore') }),
+    water: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.1, map: loadTex('water'), transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
+    lava: new THREE.MeshBasicMaterial({ map: loadTex('lava') }), // Lava emits light visually so use Basic
+    bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') })
 };
+
 
 // Set nearest filter for pixel art look
 for (const key in blockMaterials) {
@@ -508,10 +521,10 @@ const mobGeometries = {
     creeper: new THREE.BoxGeometry(0.8, 1.6, 0.8)
 };
 const mobMaterials = {
-    pig: new THREE.MeshLambertMaterial({ color: 0xFFC0CB }),
-    zombie: new THREE.MeshLambertMaterial({ color: 0x006400 }),
-    cow: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
-    creeper: new THREE.MeshLambertMaterial({ color: 0x00FF00 })
+    pig: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0xFFC0CB }),
+    zombie: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x006400 }),
+    cow: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x8B4513 }),
+    creeper: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x00FF00 })
 };
 
 socket.on('mobsUpdate', (serverMobs) => {
