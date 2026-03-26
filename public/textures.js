@@ -7,21 +7,22 @@ export function generateTexture(type) {
 
     // Base colors
     const colors = {
-        dirt: ['#5E3A21', '#4A2E1A', '#724628'],
-        grass_top: ['#55AA55', '#448844', '#66CC66'],
-        stone: ['#888888', '#666666', '#AAAAAA'],
-        wood_side: ['#5C4033', '#4A332A', '#6E4D3D'],
-        wood_top: ['#8B5A2B', '#7A4A20', '#9C6A3B'],
-        planks: ['#C19A6B', '#A68254', '#D1AC80'],
-        leaves: ['#2E8B57', '#228B22', '#006400'], // Darker greens
-        sand: ['#EEDC82', '#F4A460', '#DAA520'],
-        glass: ['#ADD8E6', '#87CEFA', '#B0E0E6'], // light blues
-        cobblestone: ['#777777', '#555555', '#666666'], // rougher stone
-        brick: ['#B22222', '#8B0000', '#A52A2A'], // red brick
-        coal_ore: ['#888888', '#666666', '#AAAAAA', '#111111', '#000000'], // stone with black flecks
-        iron_ore: ['#888888', '#666666', '#AAAAAA', '#D2B48C', '#F5DEB3'], // stone with tan flecks
-        gold_ore: ['#888888', '#666666', '#AAAAAA', '#FFD700', '#DAA520'], // stone with gold flecks
-        diamond_ore: ['#888888', '#666666', '#AAAAAA', '#00FFFF', '#00CED1'] // stone with cyan flecks
+        dirt: ['#866043', '#79553a', '#966c4a'], // Classic brown dirt
+        grass_top: ['#699e3a', '#5b8931', '#7ab845'], // Vibrant MC grass green
+        grass_side: ['#866043', '#79553a', '#966c4a'], // Base is dirt, green added later
+        stone: ['#7d7d7d', '#6e6e6e', '#8a8a8a'],
+        wood_side: ['#50422d', '#423625', '#5e4e35'], // Dark oak/spruce-ish bark
+        wood_top: ['#b59664', '#a68a5c', '#c4a26c'], // Lighter inside
+        planks: ['#b38b55', '#a37e4d', '#c2975e'], // Oak planks
+        leaves: ['#328227', '#2b7022', '#3a992d'], // Jungle/Oak leaves
+        sand: ['#dbd3a0', '#c7c091', '#e8e0aa'],
+        glass: ['#cbe8e8', '#b8d9d9', '#deffff'],
+        cobblestone: ['#666666', '#555555', '#777777'],
+        brick: ['#a35348', '#8f493f', '#b85e51'],
+        coal_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#1a1a1a', '#2b2b2b'],
+        iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d9af86', '#e6c3a1'],
+        gold_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#fcee4b', '#e6d845'],
+        diamond_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#4aedd8', '#42d6c3']
     };
 
     const scheme = colors[type] || colors.dirt;
@@ -36,7 +37,22 @@ export function generateTexture(type) {
     }
 
     // Special patterns
-    if (type === 'planks') {
+    if (type === 'grass_side') {
+        const grassColors = colors.grass_top;
+        // Top 4 pixels are solid grass
+        for (let x = 0; x < 16; x++) {
+            for (let y = 0; y < 4; y++) {
+                ctx.fillStyle = grassColors[Math.floor(Math.random() * grassColors.length)];
+                ctx.fillRect(x, y, 1, 1);
+            }
+            // Drip down effect for grass
+            let dripLength = Math.floor(Math.random() * 3); // 0 to 2 extra pixels
+            for (let y = 4; y < 4 + dripLength; y++) {
+                ctx.fillStyle = grassColors[Math.floor(Math.random() * grassColors.length)];
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    } else if (type === 'planks') {
         ctx.fillStyle = '#8B5A2B'; // darker line
         for (let y = 0; y < 16; y += 4) {
             ctx.fillRect(0, y, 16, 1);

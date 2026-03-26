@@ -8,15 +8,30 @@ const socket = io(); // Connect to Socket.IO
 
 // Basic setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+scene.background = new THREE.Color(0x7FB9F2); // Slightly more vibrant sky
+scene.fog = new THREE.Fog(0x7FB9F2, 20, 60); // Bring fog closer to hide pop-in and add atmosphere
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+// --- Sun ---
+const sunGeo = new THREE.BoxGeometry(8, 8, 8);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFFF88 }); // Bright yellow/white
+const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+sunMesh.position.set(100, 200, 50); // Matches directional light
+scene.add(sunMesh);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
 document.body.appendChild(renderer.domElement);
+
+// --- Selection Outline ---
+const outlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.001, 1.001, 1.001)); // Slightly larger to prevent Z-fighting
+const outlineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+const selectionOutline = new THREE.LineSegments(outlineGeo, outlineMat);
+selectionOutline.visible = false;
+scene.add(selectionOutline);
 
 // Lighting
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // slightly dimmer ambient
@@ -417,7 +432,7 @@ document.addEventListener('mousedown', (event) => {
 
         const intersects = raycaster.intersectObjects(objects, false);
 
-        if (intersects.length > 0) {
+        if (intersects.length > 0 && intersects[0].distance < 8) {
             const intersect = intersects[0];
 
             // Left click (0) to remove, Right click (2) to place
@@ -505,6 +520,16 @@ function animate() {
         controls.moveForward(-velocity.z * delta);
 
         controls.getObject().position.y += (velocity.y * delta); // new behavior
+
+        // Update Selection Outline
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(objects, false);
+        if (intersects.length > 0 && intersects[0].distance < 8) { // Minecraft reach is usually around 4.5-5 blocks
+            selectionOutline.visible = true;
+            selectionOutline.position.copy(intersects[0].object.position);
+        } else {
+            selectionOutline.visible = false;
+        }
 
         // --- Collision Detection ---
         const playerPos = controls.getObject().position.clone();
