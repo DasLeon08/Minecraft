@@ -1,0 +1,194 @@
+import { generateTexture } from './textures.js';
+import { setActiveBlock } from './game.js';
+
+// Available item types for the UI
+const availableItems = ['grass', 'dirt', 'stone', 'wood', 'planks'];
+const hotbarSlots = new Array(9).fill(null);
+// Initialize hotbar with some default items
+hotbarSlots[0] = 'dirt';
+hotbarSlots[1] = 'grass';
+hotbarSlots[2] = 'stone';
+hotbarSlots[3] = 'wood';
+
+// UI Elements
+const hotbarEl = document.getElementById('hotbar');
+const inventoryEl = document.getElementById('inventory');
+const inventoryItemsEl = document.getElementById('inventory-items');
+const closeInvBtn = document.getElementById('close-inventory');
+const craftSlots = document.querySelectorAll('#crafting-grid .craft-slot');
+const craftResult = document.getElementById('crafting-result');
+
+let activeHotbarIndex = 0;
+let isInventoryOpen = false;
+let draggedItem = null; // What are we currently dragging
+let draggedElement = null;
+
+// Cache generated data URLs so we don't recreate canvases every click
+const textureCache = {};
+availableItems.forEach(type => {
+    // For blocks with multiple sides, just use the main texture or top
+    let texType = type;
+    if (type === 'grass') texType = 'grass_top';
+    if (type === 'wood') texType = 'wood_side';
+    textureCache[type] = generateTexture(texType);
+});
+
+// Setup Hotbar UI
+function renderHotbar() {
+    hotbarEl.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+        const slot = document.createElement('div');
+        slot.className = `hotbar-slot ${i === activeHotbarIndex ? 'active' : ''}`;
+        slot.dataset.index = i;
+
+        const num = document.createElement('div');
+        num.className = 'slot-number';
+        num.innerText = i + 1;
+        slot.appendChild(num);
+
+        if (hotbarSlots[i]) {
+            const img = document.createElement('img');
+            img.src = textureCache[hotbarSlots[i]];
+            slot.appendChild(img);
+        }
+
+        // Select slot on click
+        slot.addEventListener('click', () => {
+            selectHotbarSlot(i);
+        });
+
+        // Drop item into hotbar
+        slot.addEventListener('dragover', e => e.preventDefault());
+        slot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (draggedItem) {
+                hotbarSlots[i] = draggedItem;
+                renderHotbar();
+                selectHotbarSlot(activeHotbarIndex); // trigger active block update
+            }
+        });
+
+        hotbarEl.appendChild(slot);
+    }
+}
+
+export function selectHotbarSlot(index) {
+    activeHotbarIndex = index;
+    renderHotbar();
+    if (hotbarSlots[index]) {
+        setActiveBlock(hotbarSlots[index]);
+    }
+}
+
+// Setup Inventory available items
+function setupInventoryItems() {
+    availableItems.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'inv-item';
+        div.draggable = true;
+
+        const img = document.createElement('img');
+        img.src = textureCache[item];
+        div.appendChild(img);
+
+        div.addEventListener('dragstart', (e) => {
+            draggedItem = item;
+            e.dataTransfer.setData('text/plain', item);
+        });
+
+        inventoryItemsEl.appendChild(div);
+    });
+}
+
+// Setup Crafting Area
+const craftingGrid = [null, null, null, null];
+
+function updateCrafting() {
+    // Simple logic: if any slot has 'wood', result is 'planks'. Otherwise nothing.
+    let hasWood = false;
+    let onlyWood = true;
+    let empty = true;
+
+    craftingGrid.forEach(slot => {
+        if (slot !== null) {
+            empty = false;
+            if (slot === 'wood') hasWood = true;
+            else onlyWood = false;
+        }
+    });
+
+    craftResult.innerHTML = '';
+
+    if (!empty && hasWood && onlyWood) {
+        // Provide planks!
+        const img = document.createElement('img');
+        img.src = textureCache['planks'];
+        img.draggable = true;
+
+        img.addEventListener('dragstart', (e) => {
+            draggedItem = 'planks';
+            e.dataTransfer.setData('text/plain', 'planks');
+            // When dragged out, consume materials
+            setTimeout(() => {
+                craftingGrid.fill(null);
+                renderCraftingGrid();
+                updateCrafting();
+            }, 10);
+        });
+
+        craftResult.appendChild(img);
+    }
+}
+
+function renderCraftingGrid() {
+    craftSlots.forEach((slot, i) => {
+        slot.innerHTML = '';
+        if (craftingGrid[i]) {
+            const img = document.createElement('img');
+            img.src = textureCache[craftingGrid[i]];
+            slot.appendChild(img);
+        }
+    });
+}
+
+craftSlots.forEach((slot, i) => {
+    slot.addEventListener('dragover', e => e.preventDefault());
+    slot.addEventListener('drop', e => {
+        e.preventDefault();
+        if (draggedItem && draggedItem !== 'planks') { // simple prevent drop planks back
+            craftingGrid[i] = draggedItem;
+            renderCraftingGrid();
+            updateCrafting();
+        }
+    });
+
+    // remove item from grid on click
+    slot.addEventListener('click', () => {
+        if(craftingGrid[i]) {
+            craftingGrid[i] = null;
+            renderCraftingGrid();
+            updateCrafting();
+        }
+    });
+});
+
+export function toggleInventory(controls) {
+    isInventoryOpen = !isInventoryOpen;
+    if (isInventoryOpen) {
+        controls.unlock();
+        inventoryEl.style.display = 'block';
+    } else {
+        inventoryEl.style.display = 'none';
+        controls.lock();
+    }
+}
+
+closeInvBtn.addEventListener('click', () => {
+    const controls = document.querySelector('canvas').__controls; // Hacky access or pass via game.js
+    // We will trigger unlock natively via game.js keydown instead
+});
+
+// Init
+renderHotbar();
+setupInventoryItems();
+selectHotbarSlot(0);

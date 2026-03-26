@@ -30,7 +30,11 @@ io.on('connection', (socket) => {
     // Convert map to array for initial sync
     const currentWorld = Array.from(worldBlocks.entries()).map(([key, value]) => {
         const [x, y, z] = key.split(',').map(Number);
-        return { type: value, position: { x, y, z } };
+        if (value === 'remove') {
+             return { action: 'remove', position: { x, y, z } };
+        } else {
+             return { action: 'add', blockType: value, position: { x, y, z } };
+        }
     });
     socket.emit('worldState', currentWorld);
 
@@ -48,12 +52,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('updateBlock', (blockData) => {
-        // blockData: { type: 'add'/'remove', position: {x,y,z} }
+        // blockData: { action: 'add'/'remove', position: {x,y,z}, blockType: 'grass' }
         const key = `${blockData.position.x},${blockData.position.y},${blockData.position.z}`;
 
-        if (blockData.type === 'add') {
-            worldBlocks.set(key, 'add');
-        } else if (blockData.type === 'remove') {
+        if (blockData.action === 'add') {
+            worldBlocks.set(key, blockData.blockType);
+        } else if (blockData.action === 'remove') {
             // Store the removal so late joiners also remove initial terrain
             worldBlocks.set(key, 'remove');
         }

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { generateTexture } from './textures.js';
+import * as UI from './ui.js';
 
 const socket = io(); // Connect to Socket.IO
 
@@ -11,32 +13,93 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
 document.body.appendChild(renderer.domElement);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // slightly dimmer ambient
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(100, 200, 50);
 directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.width = 2048;
+directionalLight.shadow.mapSize.height = 2048;
+directionalLight.shadow.camera.near = 0.5;
+directionalLight.shadow.camera.far = 500;
+directionalLight.shadow.camera.left = -50;
+directionalLight.shadow.camera.right = 50;
+directionalLight.shadow.camera.top = 50;
+directionalLight.shadow.camera.bottom = -50;
 scene.add(directionalLight);
+
+// Texture Loader
+const textureLoader = new THREE.TextureLoader();
+
+// Materials Map
+export const blockMaterials = {
+    grass: [
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // right
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // left
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('grass_top')) }), // top
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // bottom
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }), // front
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) })  // back
+    ],
+    dirt: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('dirt')) }),
+    stone: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('stone')) }),
+    wood: [
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // right
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // left
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_top')) }), // top
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_top')) }), // bottom
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) }), // front
+        new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('wood_side')) })  // back
+    ],
+    planks: new THREE.MeshLambertMaterial({ map: textureLoader.load(generateTexture('planks')) })
+};
+
+// Set nearest filter for pixel art look
+for (const key in blockMaterials) {
+    if (Array.isArray(blockMaterials[key])) {
+        blockMaterials[key].forEach(mat => {
+            mat.map.magFilter = THREE.NearestFilter;
+            mat.map.minFilter = THREE.NearestFilter;
+        });
+    } else {
+        blockMaterials[key].map.magFilter = THREE.NearestFilter;
+        blockMaterials[key].map.minFilter = THREE.NearestFilter;
+    }
+}
 
 // --- Controls ---
 const controls = new PointerLockControls(camera, document.body);
 const instructions = document.getElementById('instructions');
+const inventoryEl = document.getElementById('inventory');
+const closeInvBtn = document.getElementById('close-inventory');
 
 instructions.addEventListener('click', () => {
-    controls.lock();
+    if (inventoryEl.style.display !== 'block') {
+        controls.lock();
+    }
 });
 
 controls.addEventListener('lock', () => {
     instructions.style.display = 'none';
+    inventoryEl.style.display = 'none';
 });
 
 controls.addEventListener('unlock', () => {
-    instructions.style.display = 'block';
+    if (inventoryEl.style.display !== 'block') {
+        instructions.style.display = 'block';
+    }
 });
+
+closeInvBtn.addEventListener('click', () => {
+    controls.lock();
+});
+
 scene.add(controls.getObject());
 
 // initial camera position
@@ -54,27 +117,48 @@ const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
 const onKeyDown = (event) => {
-    switch (event.code) {
-        case 'ArrowUp':
-        case 'KeyW':
-            moveForward = true;
-            break;
-        case 'ArrowLeft':
-        case 'KeyA':
-            moveLeft = true;
-            break;
-        case 'ArrowDown':
-        case 'KeyS':
-            moveBackward = true;
-            break;
-        case 'ArrowRight':
-        case 'KeyD':
-            moveRight = true;
-            break;
-        case 'Space':
-            if (canJump === true) velocity.y += 10;
-            canJump = false;
-            break;
+    if (controls.isLocked) {
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = true;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = true;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = true;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = true;
+                break;
+            case 'Space':
+                if (canJump === true) velocity.y += 10;
+                canJump = false;
+                break;
+            case 'Digit1': UI.selectHotbarSlot(0); break;
+            case 'Digit2': UI.selectHotbarSlot(1); break;
+            case 'Digit3': UI.selectHotbarSlot(2); break;
+            case 'Digit4': UI.selectHotbarSlot(3); break;
+            case 'Digit5': UI.selectHotbarSlot(4); break;
+            case 'Digit6': UI.selectHotbarSlot(5); break;
+            case 'Digit7': UI.selectHotbarSlot(6); break;
+            case 'Digit8': UI.selectHotbarSlot(7); break;
+            case 'Digit9': UI.selectHotbarSlot(8); break;
+        }
+    }
+
+    if (event.code === 'KeyE') {
+        if (controls.isLocked) {
+            controls.unlock();
+            inventoryEl.style.display = 'block';
+        } else {
+            inventoryEl.style.display = 'none';
+            controls.lock();
+        }
     }
 };
 
@@ -104,17 +188,27 @@ document.addEventListener('keyup', onKeyUp);
 
 // --- Terrain (Voxel Generation) ---
 const geometry = new THREE.BoxGeometry(1, 1, 1);
-const material = new THREE.MeshLambertMaterial({ color: 0x55aa55 }); // Green color
 
-const worldSize = 20; // 20x20 blocks
+const worldSize = 30; // 30x30 blocks
 const objects = []; // Store blocks for collision/raycasting
 
 for (let x = -worldSize / 2; x < worldSize / 2; x++) {
     for (let z = -worldSize / 2; z < worldSize / 2; z++) {
-        const voxel = new THREE.Mesh(geometry, material);
-        voxel.position.set(x, -0.5, z); // Center of block is 0, so -0.5 makes top flush with 0
+        const voxel = new THREE.Mesh(geometry, blockMaterials['grass']);
+        voxel.position.set(Math.round(x), -0.5, Math.round(z)); // Center of block is 0, so -0.5 makes top flush with 0
+        voxel.receiveShadow = true;
+        voxel.castShadow = true;
+        voxel.userData.type = 'grass';
         scene.add(voxel);
         objects.push(voxel);
+
+        // Add a layer of dirt underneath
+        const dirt = new THREE.Mesh(geometry, blockMaterials['dirt']);
+        dirt.position.set(Math.round(x), -1.5, Math.round(z));
+        dirt.receiveShadow = true;
+        dirt.userData.type = 'dirt';
+        scene.add(dirt);
+        objects.push(dirt);
     }
 }
 
@@ -171,7 +265,7 @@ socket.on('blockUpdated', (update) => {
 });
 
 function applyBlockUpdate(data) {
-    if (data.type === 'remove') {
+    if (data.action === 'remove') {
         const objToRemove = objects.find(obj =>
             Math.abs(obj.position.x - data.position.x) < 0.1 &&
             Math.abs(obj.position.y - data.position.y) < 0.1 &&
@@ -181,21 +275,30 @@ function applyBlockUpdate(data) {
             scene.remove(objToRemove);
             objects.splice(objects.indexOf(objToRemove), 1);
         }
-    } else if (data.type === 'add') {
-        const voxel = new THREE.Mesh(geometry, placeMaterial);
+    } else if (data.action === 'add') {
+        const material = blockMaterials[data.blockType] || blockMaterials['dirt'];
+        const voxel = new THREE.Mesh(geometry, material);
         voxel.position.copy(data.position);
+        voxel.receiveShadow = true;
+        voxel.castShadow = true;
+        voxel.userData.type = data.blockType;
         scene.add(voxel);
         objects.push(voxel);
     }
 }
 
 // --- Voxel Interaction (Mining / Placing) ---
+export let activeBlockType = 'dirt'; // Default placeable block
+
+// Simple function to change active block (used later by UI)
+export function setActiveBlock(type) {
+    activeBlockType = type;
+}
+
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(); // Always center (0,0) for pointer lock
-const placeMaterial = new THREE.MeshLambertMaterial({ color: 0x885522 }); // Brown for placed blocks
 
 document.addEventListener('mousedown', (event) => {
-    event.preventDefault(); // prevent context menu
     if (controls.isLocked === true) {
         raycaster.setFromCamera(mouse, camera);
 
@@ -207,15 +310,21 @@ document.addEventListener('mousedown', (event) => {
             // Left click (0) to remove, Right click (2) to place
             if (event.button === 0) {
                 // Remove block
-                if (intersect.object !== scene) {
+                // Don't remove the bottommost dirt (y < -1) to prevent falling forever, or let them do it? Let's just limit y.
+                if (intersect.object !== scene && intersect.object.position.y > -2) {
                     const pos = intersect.object.position;
                     scene.remove(intersect.object);
                     objects.splice(objects.indexOf(intersect.object), 1);
-                    socket.emit('updateBlock', { type: 'remove', position: pos });
+                    socket.emit('updateBlock', { action: 'remove', position: pos });
                 }
             } else if (event.button === 2) {
                 // Place block
-                const voxel = new THREE.Mesh(geometry, placeMaterial);
+                const material = blockMaterials[activeBlockType] || blockMaterials['dirt'];
+                const voxel = new THREE.Mesh(geometry, material);
+                voxel.receiveShadow = true;
+                voxel.castShadow = true;
+                voxel.userData.type = activeBlockType;
+
                 // Calculate correct position based on integer grid logic
                 voxel.position.copy(intersect.point).add(intersect.face.normal.clone().multiplyScalar(0.5));
 
@@ -241,7 +350,7 @@ document.addEventListener('mousedown', (event) => {
                 if (!playerBox.intersectsBox(blockBox)) {
                     scene.add(voxel);
                     objects.push(voxel);
-                    socket.emit('updateBlock', { type: 'add', position: voxel.position });
+                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: voxel.position });
                 }
             }
         }
