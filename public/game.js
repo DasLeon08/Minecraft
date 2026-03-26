@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { generateTexture } from './textures.js';
 import * as UI from './ui.js';
 import { noise } from './noise.js';
@@ -31,13 +36,37 @@ for(let i=0; i<10; i++) {
     clouds.push(cloud);
 }
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true }); // Better z-fighting resolution
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" }); // Better z-fighting resolution and high perf
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio); // Sharper rendering on high-DPI displays
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
-renderer.toneMappingExposure = 1.2; // Increase exposure slightly
+renderer.toneMappingExposure = 1.0; // Balanced exposure
 document.body.appendChild(renderer.domElement);
+
+// --- Post-Processing Setup ---
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// Screen Space Ambient Occlusion (SSAO) for deep corners and realistic voxel look
+const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+ssaoPass.kernelRadius = 16;
+ssaoPass.minDistance = 0.005;
+ssaoPass.maxDistance = 0.1;
+composer.addPass(ssaoPass);
+
+// Bloom Pass for glowing lava and bright sun reflections
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+bloomPass.threshold = 0.8; // Only very bright things glow
+bloomPass.strength = 0.6; // Subtle glow
+bloomPass.radius = 0.5;
+composer.addPass(bloomPass);
+
+// Add OutputPass to fix colors and tone mapping with composer
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
 
 // --- Selection Outline ---
 const outlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.001, 1.001, 1.001)); // Slightly larger to prevent Z-fighting
@@ -47,25 +76,25 @@ selectionOutline.visible = false;
 scene.add(selectionOutline);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xd9eaff, 0.4); // Cooler, softer ambient // Slightly brighter ambient
+const ambientLight = new THREE.AmbientLight(0xd9eaff, 0.45); // Cooler, softer ambient
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xfffaec, 1.8); // Warmer, brighter sunlight // Stronger warmer light
-directionalLight.position.set(150, 300, 100);
+const directionalLight = new THREE.DirectionalLight(0xfffaec, 2.0); // Warmer, brighter sunlight
+directionalLight.position.set(200, 300, 150);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
 directionalLight.shadow.mapSize.height = 4096;
-directionalLight.shadow.bias = -0.0005; // fix shadow acne
+directionalLight.shadow.bias = -0.0001; // reduced shadow acne
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 1000;
-directionalLight.shadow.camera.left = -200; // significantly expanded shadow area for mountains
-directionalLight.shadow.camera.right = 200;
-directionalLight.shadow.camera.top = 200;
-directionalLight.shadow.camera.bottom = -200;
+directionalLight.shadow.camera.left = -300; // significantly expanded shadow area
+directionalLight.shadow.camera.right = 300;
+directionalLight.shadow.camera.top = 300;
+directionalLight.shadow.camera.bottom = -300;
 scene.add(directionalLight);
 
-// Hemisphere light for better outdoor lighting (blueish sky, greenish ground)
-const hemiLight = new THREE.HemisphereLight(0xe6f2ff, 0x334433, 0.6); // Sky blue to deep green ground bounce
+// Hemisphere light for better outdoor lighting
+const hemiLight = new THREE.HemisphereLight(0xe6f2ff, 0x223322, 0.7); // Sky blue to deep green ground bounce
 hemiLight.position.set(0, 200, 0);
 scene.add(hemiLight);
 
@@ -123,7 +152,7 @@ export const blockMaterials = {
     gold_ore: new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.4, map: loadTex('gold_ore') }),
     diamond_ore: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.5, map: loadTex('diamond_ore') }),
     water: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.1, map: loadTex('water'), transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
-    lava: new THREE.MeshBasicMaterial({ map: loadTex('lava') }), // Lava emits light visually so use Basic
+    lava: new THREE.MeshBasicMaterial({ map: loadTex('lava'), color: 0xffffff }), // Lava emits light visually so use Basic
     bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') })
 };
 
@@ -664,6 +693,8 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    ssaoPass.setSize(window.innerWidth, window.innerHeight);
 });
 
 // Render loop
@@ -809,7 +840,7 @@ function animate() {
 
     prevTime = time;
 
-    renderer.render(scene, camera);
+    composer.render();
 }
 animate();
 
