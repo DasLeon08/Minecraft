@@ -5,7 +5,8 @@ import { setActiveBlock } from './game.js';
 const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
-    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore'
+    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
+    'water', 'bedrock'
 ];
 const hotbarSlots = new Array(9).fill(null);
 // Initialize hotbar with some default items

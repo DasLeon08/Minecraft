@@ -22,7 +22,9 @@ export function generateTexture(type) {
         coal_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#1a1a1a', '#2b2b2b'],
         iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d9af86', '#e6c3a1'],
         gold_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#fcee4b', '#e6d845'],
-        diamond_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#4aedd8', '#42d6c3']
+        diamond_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#4aedd8', '#42d6c3'],
+        water: ['#3e6db5', '#335c9a', '#4c86d1'], // Water blues
+        bedrock: ['#333333', '#222222', '#111111', '#444444', '#000000'] // Very dark scattered
     };
 
     const scheme = colors[type] || colors.dirt;
@@ -86,6 +88,13 @@ export function generateTexture(type) {
          for(let i=0; i<64; i++) {
              ctx.clearRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
          }
+    } else if (type === 'water') {
+        // slightly transparent overall
+        const imgData = ctx.getImageData(0, 0, 16, 16);
+        for(let i=3; i<imgData.data.length; i+=4) {
+            imgData.data[i] = 200; // 0-255 opacity
+        }
+        ctx.putImageData(imgData, 0, 0);
     }
 
     const img = canvas.toDataURL('image/png');

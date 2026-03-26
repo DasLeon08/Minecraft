@@ -20,6 +20,17 @@ const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 sunMesh.position.set(100, 200, 50); // Matches directional light
 scene.add(sunMesh);
 
+// --- Clouds ---
+const clouds = [];
+const cloudGeo = new THREE.BoxGeometry(6, 2, 8);
+const cloudMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 });
+for(let i=0; i<10; i++) {
+    const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+    cloud.position.set(Math.random() * 200 - 100, 40 + Math.random() * 10, Math.random() * 200 - 100);
+    scene.add(cloud);
+    clouds.push(cloud);
+}
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -211,27 +222,104 @@ const onKeyUp = (event) => {
 document.addEventListener('keydown', onKeyDown);
 document.addEventListener('keyup', onKeyUp);
 
-// --- Procedural Terrain Generation ---
+// --- Voxel Data Structure & Hidden Surface Removal ---
 const geometry = new THREE.BoxGeometry(1, 1, 1);
-const objects = []; // Store blocks for collision/raycasting
+const objects = []; // Active meshes for raycasting
+export const worldData = new Map(); // x,y,z -> type
+const renderedBlocks = new Map(); // x,y,z -> THREE.Mesh
 
-const worldSize = 40; // 40x40 blocks
+const worldSize = 64; // 64x64 blocks
+const worldDepth = -30; // generate down to this y-level
 
-function createBlock(type, x, y, z) {
+const transparentBlocks = ['glass', 'leaves', 'water'];
+
+function getBlockKey(x, y, z) {
+    return `${x},${y},${z}`;
+}
+
+// Add block to data but don't render yet
+function setVoxelData(x, y, z, type) {
+    worldData.set(getBlockKey(x, y, z), type);
+}
+
+function getVoxelData(x, y, z) {
+    return worldData.get(getBlockKey(x, y, z));
+}
+
+function isTransparent(type) {
+    if (!type) return true; // Air is transparent
+    return transparentBlocks.includes(type);
+}
+
+function shouldRenderFace(x, y, z, dx, dy, dz) {
+    const neighborType = getVoxelData(x + dx, y + dy, z + dz);
+    return isTransparent(neighborType);
+}
+
+function shouldRenderBlock(x, y, z, type) {
+    // Render if any adjacent block is transparent
+    if (shouldRenderFace(x, y, z, 1, 0, 0)) return true;
+    if (shouldRenderFace(x, y, z, -1, 0, 0)) return true;
+    if (shouldRenderFace(x, y, z, 0, 1, 0)) return true;
+    if (shouldRenderFace(x, y, z, 0, -1, 0)) return true;
+    if (shouldRenderFace(x, y, z, 0, 0, 1)) return true;
+    if (shouldRenderFace(x, y, z, 0, 0, -1)) return true;
+    return false;
+}
+
+function renderBlock(x, y, z, type) {
+    const key = getBlockKey(x, y, z);
+    if (renderedBlocks.has(key)) return; // Already rendered
+
     const material = blockMaterials[type] || blockMaterials['dirt'];
     const voxel = new THREE.Mesh(geometry, material);
     voxel.position.set(x, y, z);
     voxel.receiveShadow = true;
     voxel.castShadow = true;
     voxel.userData.type = type;
+
     scene.add(voxel);
     objects.push(voxel);
+    renderedBlocks.set(key, voxel);
 }
 
+function removeRenderedBlock(x, y, z) {
+    const key = getBlockKey(x, y, z);
+    const voxel = renderedBlocks.get(key);
+    if (voxel) {
+        scene.remove(voxel);
+        objects.splice(objects.indexOf(voxel), 1);
+        renderedBlocks.delete(key);
+    }
+}
+
+function updateBlockVisibility(x, y, z) {
+    const type = getVoxelData(x, y, z);
+    if (!type) {
+        removeRenderedBlock(x, y, z);
+        return;
+    }
+
+    if (shouldRenderBlock(x, y, z, type)) {
+        renderBlock(x, y, z, type);
+    } else {
+        removeRenderedBlock(x, y, z);
+    }
+}
+
+function updateAdjacentBlocksVisibility(x, y, z) {
+    updateBlockVisibility(x + 1, y, z);
+    updateBlockVisibility(x - 1, y, z);
+    updateBlockVisibility(x, y + 1, z);
+    updateBlockVisibility(x, y - 1, z);
+    updateBlockVisibility(x, y, z + 1);
+    updateBlockVisibility(x, y, z - 1);
+}
+
+// Generate the initial world map
 for (let x = -worldSize / 2; x < worldSize / 2; x++) {
     for (let z = -worldSize / 2; z < worldSize / 2; z++) {
         // Heightmap via 2D noise
-        // Smooth rolling hills, amplitude ~5
         const noiseVal = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0);
         const y = Math.floor(noiseVal * 10) - 5 + 0.5; // Offset to n.5 so top is at integer
 
@@ -243,26 +331,55 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
             surfaceBlock = 'stone'; // Mountain tops
         }
 
-        // Add top block
-        createBlock(surfaceBlock, x, y, z);
+        // Generate deep world layer by layer
+        for (let currentY = worldDepth; currentY <= y; currentY++) {
+            let blockType = 'stone';
 
-        // Add some depth (dirt or stone)
-        if (surfaceBlock === 'grass') {
-            createBlock('dirt', x, y - 1, z);
-            createBlock('stone', x, y - 2, z);
-        } else if (surfaceBlock === 'sand') {
-            createBlock('sand', x, y - 1, z);
-            createBlock('stone', x, y - 2, z);
-        } else {
-            createBlock('stone', x, y - 1, z);
-            createBlock('stone', x, y - 2, z);
+            // Bottom layer
+            if (currentY === worldDepth) {
+                blockType = 'bedrock';
+            } else if (currentY === y) {
+                // Surface
+                blockType = surfaceBlock;
+            } else if (currentY > y - 4 && surfaceBlock === 'grass') {
+                blockType = 'dirt';
+            } else if (currentY > y - 3 && surfaceBlock === 'sand') {
+                blockType = 'sand';
+            } else {
+                // Stone layer - check for caves and ores
+                const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
+                if (caveNoise > 0.65) {
+                    continue; // Cave (air)
+                }
+
+                // Ores
+                if (Math.random() < 0.04) {
+                    const depthPercent = (currentY - worldDepth) / (y - worldDepth);
+                    if (depthPercent < 0.2 && Math.random() < 0.1) blockType = 'diamond_ore';
+                    else if (depthPercent < 0.4 && Math.random() < 0.2) blockType = 'gold_ore';
+                    else if (depthPercent < 0.7 && Math.random() < 0.3) blockType = 'iron_ore';
+                    else if (Math.random() < 0.5) blockType = 'coal_ore';
+                }
+            }
+
+            setVoxelData(x, currentY, z, blockType);
         }
 
-        // Procedural Trees (spawn only on grass, 5% chance)
-        if (surfaceBlock === 'grass' && Math.random() < 0.05) {
+        // Generate Water
+        const waterLevel = -3.5;
+        for (let currentY = Math.ceil(waterLevel); currentY <= Math.floor(y); currentY++) {
+            // we're below surface, already generated blocks above
+        }
+        // Fill water up to waterLevel if surface is below it
+        for(let wy = y + 1; wy <= waterLevel; wy++) {
+            setVoxelData(x, wy, z, 'water');
+        }
+
+        // Procedural Trees (spawn only on grass, 2% chance)
+        if (surfaceBlock === 'grass' && y >= waterLevel && Math.random() < 0.02) {
             const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
             for (let i = 1; i <= treeHeight; i++) {
-                createBlock('wood', x, y + i, z);
+                setVoxelData(x, y + i, z, 'wood');
             }
             // Leaves
             for (let lx = -2; lx <= 2; lx++) {
@@ -270,13 +387,21 @@ for (let x = -worldSize / 2; x < worldSize / 2; x++) {
                     for (let ly = 0; ly <= 1; ly++) {
                         if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 1) continue; // rounded corners
                         if (lx === 0 && lz === 0 && ly === 0) continue; // trunk space
-                        createBlock('leaves', x + lx, y + treeHeight - 1 + ly, z + lz);
+                        setVoxelData(x + lx, y + treeHeight - 1 + ly, z + lz, 'leaves');
                     }
                 }
             }
         }
     }
 }
+
+// Render visible blocks
+worldData.forEach((type, key) => {
+    const [x, y, z] = key.split(',').map(Number);
+    if (shouldRenderBlock(x, y, z, type)) {
+        renderBlock(x, y, z, type);
+    }
+});
 
 // Adjust camera spawn height based on terrain center
 const spawnNoise = noise.fbm2D(0, 0, 4, 0.5, 2.0);
@@ -393,25 +518,18 @@ socket.on('blockUpdated', (update) => {
 });
 
 function applyBlockUpdate(data) {
+    const x = Math.round(data.position.x);
+    const y = data.position.y; // n.5
+    const z = Math.round(data.position.z);
+
     if (data.action === 'remove') {
-        const objToRemove = objects.find(obj =>
-            Math.abs(obj.position.x - data.position.x) < 0.1 &&
-            Math.abs(obj.position.y - data.position.y) < 0.1 &&
-            Math.abs(obj.position.z - data.position.z) < 0.1
-        );
-        if (objToRemove) {
-            scene.remove(objToRemove);
-            objects.splice(objects.indexOf(objToRemove), 1);
-        }
+        worldData.delete(getBlockKey(x, y, z));
+        updateBlockVisibility(x, y, z);
+        updateAdjacentBlocksVisibility(x, y, z);
     } else if (data.action === 'add') {
-        const material = blockMaterials[data.blockType] || blockMaterials['dirt'];
-        const voxel = new THREE.Mesh(geometry, material);
-        voxel.position.copy(data.position);
-        voxel.receiveShadow = true;
-        voxel.castShadow = true;
-        voxel.userData.type = data.blockType;
-        scene.add(voxel);
-        objects.push(voxel);
+        setVoxelData(x, y, z, data.blockType);
+        updateBlockVisibility(x, y, z);
+        updateAdjacentBlocksVisibility(x, y, z);
     }
 }
 
@@ -438,47 +556,42 @@ document.addEventListener('mousedown', (event) => {
             // Left click (0) to remove, Right click (2) to place
             if (event.button === 0) {
                 // Remove block
-                // Don't remove the bottommost dirt (y < -1) to prevent falling forever, or let them do it? Let's just limit y.
-                if (intersect.object !== scene && intersect.object.position.y > -2) {
+                // Don't allow breaking bedrock
+                if (intersect.object !== scene && intersect.object.userData.type !== 'bedrock') {
                     const pos = intersect.object.position;
-                    scene.remove(intersect.object);
-                    objects.splice(objects.indexOf(intersect.object), 1);
+                    const x = Math.round(pos.x);
+                    const y = pos.y;
+                    const z = Math.round(pos.z);
+
+                    worldData.delete(getBlockKey(x, y, z));
+                    updateBlockVisibility(x, y, z);
+                    updateAdjacentBlocksVisibility(x, y, z);
                     socket.emit('updateBlock', { action: 'remove', position: pos });
                 }
             } else if (event.button === 2) {
                 // Place block
-                const material = blockMaterials[activeBlockType] || blockMaterials['dirt'];
-                const voxel = new THREE.Mesh(geometry, material);
-                voxel.receiveShadow = true;
-                voxel.castShadow = true;
-                voxel.userData.type = activeBlockType;
+                const placePos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(0.5));
+                const x = Math.round(placePos.x);
+                const y = Math.floor(placePos.y) + 0.5;
+                const z = Math.round(placePos.z);
 
-                // Calculate correct position based on integer grid logic
-                voxel.position.copy(intersect.point).add(intersect.face.normal.clone().multiplyScalar(0.5));
-
-                // For a 1x1x1 cube, if the initial terrain is placed at (integer, -0.5, integer):
-                // x and z should be rounded to the nearest integer.
-                // y should be rounded to the nearest integer minus 0.5.
-                voxel.position.x = Math.round(voxel.position.x);
-                voxel.position.z = Math.round(voxel.position.z);
-                voxel.position.y = Math.floor(voxel.position.y) + 0.5;
+                const placeVec = new THREE.Vector3(x, y, z);
 
                 // Don't place block inside player
-                // We do a simple AABB check against the player's bounding box
                 const playerBox = new THREE.Box3().setFromCenterAndSize(
                     controls.getObject().position,
-                    new THREE.Vector3(0.8, 1.8, 0.8) // player size
+                    new THREE.Vector3(0.8, 1.8, 0.8)
                 );
-
                 const blockBox = new THREE.Box3().setFromCenterAndSize(
-                    voxel.position,
+                    placeVec,
                     new THREE.Vector3(1, 1, 1)
                 );
 
                 if (!playerBox.intersectsBox(blockBox)) {
-                    scene.add(voxel);
-                    objects.push(voxel);
-                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: voxel.position });
+                    setVoxelData(x, y, z, activeBlockType);
+                    updateBlockVisibility(x, y, z);
+                    updateAdjacentBlocksVisibility(x, y, z);
+                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: placeVec });
                 }
             }
         }
@@ -531,68 +644,78 @@ function animate() {
             selectionOutline.visible = false;
         }
 
-        // --- Collision Detection ---
-        const playerPos = controls.getObject().position.clone();
+        // --- Fast Grid-Based Collision Detection ---
         const playerSize = new THREE.Vector3(0.8, 1.8, 0.8);
-
-        // We simulate movement and check for collision
-        const nextPos = playerPos.clone();
-
-        // Create player AABB
         const playerBox = new THREE.Box3();
 
-        // Check Y collision first
-        let onGround = false;
-        playerBox.setFromCenterAndSize(nextPos, playerSize);
+        // We only need to check blocks immediately around the player (e.g. within a 2-block radius)
+        const px = Math.round(controls.getObject().position.x);
+        const py = Math.floor(controls.getObject().position.y);
+        const pz = Math.round(controls.getObject().position.z);
 
-        for (let i = 0; i < objects.length; i++) {
-            const blockBox = new THREE.Box3().setFromObject(objects[i]);
-            if (playerBox.intersectsBox(blockBox)) {
-                // If moving down
-                if (velocity.y < 0) {
-                    controls.getObject().position.y = blockBox.max.y + (playerSize.y / 2);
-                    velocity.y = 0;
-                    onGround = true;
-                    canJump = true;
-                } else if (velocity.y > 0) { // moving up
-                    controls.getObject().position.y = blockBox.min.y - (playerSize.y / 2);
-                    velocity.y = 0;
+        // Helper function to check collision against solid blocks in worldData
+        const checkCollisions = () => {
+            playerBox.setFromCenterAndSize(controls.getObject().position, playerSize);
+            for (let bx = px - 1; bx <= px + 1; bx++) {
+                for (let by = py - 2; by <= py + 2; by++) {
+                    for (let bz = pz - 1; bz <= pz + 1; bz++) {
+                        const type = getVoxelData(bx, by + 0.5, bz); // y is stored as n.5
+                        if (type && type !== 'water') { // water is non-solid
+                            const blockBox = new THREE.Box3().setFromCenterAndSize(
+                                new THREE.Vector3(bx, by + 0.5, bz),
+                                new THREE.Vector3(1, 1, 1)
+                            );
+                            if (playerBox.intersectsBox(blockBox)) {
+                                return blockBox;
+                            }
+                        }
+                    }
                 }
+            }
+            return null;
+        };
+
+        // Y Collision (Gravity/Jumping)
+        const hitY = checkCollisions();
+        if (hitY) {
+            if (velocity.y < 0) { // falling down
+                controls.getObject().position.y = hitY.max.y + (playerSize.y / 2);
+                velocity.y = 0;
+                canJump = true;
+            } else if (velocity.y > 0) { // jumping up into a block
+                controls.getObject().position.y = hitY.min.y - (playerSize.y / 2);
+                velocity.y = 0;
+            }
+        }
+
+        // X/Z Collision (Walking into walls)
+        const hitXZ = checkCollisions();
+        if (hitXZ) {
+            playerBox.setFromCenterAndSize(controls.getObject().position, playerSize);
+            const overlapX = Math.min(playerBox.max.x - hitXZ.min.x, hitXZ.max.x - playerBox.min.x);
+            const overlapZ = Math.min(playerBox.max.z - hitXZ.min.z, hitXZ.max.z - playerBox.min.z);
+
+            if (overlapX < overlapZ) {
+                if (playerBox.max.x > hitXZ.min.x && playerBox.min.x < hitXZ.min.x) {
+                    controls.getObject().position.x -= overlapX;
+                } else {
+                    controls.getObject().position.x += overlapX;
+                }
+                velocity.x = 0;
+            } else {
+                if (playerBox.max.z > hitXZ.min.z && playerBox.min.z < hitXZ.min.z) {
+                    controls.getObject().position.z -= overlapZ;
+                } else {
+                    controls.getObject().position.z += overlapZ;
+                }
+                velocity.z = 0;
             }
         }
 
         // If falling out of the world
-        if (controls.getObject().position.y < -10) {
+        if (controls.getObject().position.y < worldDepth - 5) {
             velocity.y = 0;
-            controls.getObject().position.set(0, 2, 0);
-        }
-
-        // We should really handle X/Z collisions, but this is a simple prototype
-        // To prevent walking through walls, we'll do a simple check
-        playerBox.setFromCenterAndSize(controls.getObject().position, playerSize);
-        for (let i = 0; i < objects.length; i++) {
-            const blockBox = new THREE.Box3().setFromObject(objects[i]);
-            if (playerBox.intersectsBox(blockBox)) {
-                // Push out of the block based on overlap
-                const overlapX = Math.min(playerBox.max.x - blockBox.min.x, blockBox.max.x - playerBox.min.x);
-                const overlapZ = Math.min(playerBox.max.z - blockBox.min.z, blockBox.max.z - playerBox.min.z);
-
-                if (overlapX < overlapZ) {
-                    if (playerBox.max.x > blockBox.min.x && playerBox.min.x < blockBox.min.x) {
-                        controls.getObject().position.x -= overlapX;
-                    } else {
-                        controls.getObject().position.x += overlapX;
-                    }
-                    velocity.x = 0;
-                } else {
-                    if (playerBox.max.z > blockBox.min.z && playerBox.min.z < blockBox.min.z) {
-                        controls.getObject().position.z -= overlapZ;
-                    } else {
-                        controls.getObject().position.z += overlapZ;
-                    }
-                    velocity.z = 0;
-                }
-            }
+            controls.getObject().position.set(0, 10, 0); // respawn
         }
 
         // Emit player movement
@@ -603,6 +726,14 @@ function animate() {
              });
         }
     }
+
+    // Move clouds slowly
+    clouds.forEach(cloud => {
+        cloud.position.x += 0.02;
+        if (cloud.position.x > 100) {
+            cloud.position.x = -100;
+        }
+    });
 
     prevTime = time;
 
