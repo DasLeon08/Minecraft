@@ -16,12 +16,19 @@ export const availableTools = [
     'wooden_axe', 'stone_axe', 'iron_axe', 'gold_axe', 'diamond_axe'
 ];
 
-const hotbarSlots = new Array(9).fill(null);
-// Initialize hotbar with some default items
+// Player's actual inventory (3 rows of 9 slots)
+export const inventorySlots = new Array(27).fill(null);
+const inventoryCounts = new Array(27).fill(0); // Optional: if we want to add stack numbers later, just keeping data parallel for now
+
+// Hotbar is separate from main inventory for this simple implementation
+export const hotbarSlots = new Array(9).fill(null);
+export const hotbarCounts = new Array(9).fill(0);
+
+// Initialize hotbar with some default items so player isn't completely empty
 hotbarSlots[0] = 'dirt';
+hotbarCounts[0] = 64;
 hotbarSlots[1] = 'wooden_pickaxe';
-hotbarSlots[2] = 'stone';
-hotbarSlots[3] = 'wood';
+hotbarCounts[1] = 1;
 
 // UI Elements
 const hotbarEl = document.getElementById('hotbar');
@@ -63,7 +70,7 @@ async function preloadTextures() {
 
     renderHotbar();
     renderStatusBars();
-    setupInventoryItems();
+    renderInventorySlots();
     selectHotbarSlot(0);
 }
 
@@ -84,6 +91,14 @@ function renderHotbar() {
             const img = document.createElement('img');
             img.src = isoTextureCache[hotbarSlots[i]] || textureCache[hotbarSlots[i]];
             slot.appendChild(img);
+
+            img.draggable = true;
+            img.dataset.source = 'hotbar';
+            img.dataset.index = i;
+            img.addEventListener('dragstart', (e) => {
+                draggedItem = hotbarSlots[i];
+                draggedElement = img;
+            });
         }
 
         // Select slot on click
@@ -96,9 +111,34 @@ function renderHotbar() {
         slot.addEventListener('drop', (e) => {
             e.preventDefault();
             if (draggedItem) {
+                // Remove from old slot if moving within inventory/hotbar
+                if (draggedElement && draggedElement.dataset.source === 'inventory') {
+                    const idx = parseInt(draggedElement.dataset.index);
+                    inventorySlots[idx] = null;
+                } else if (draggedElement && draggedElement.dataset.source === 'hotbar') {
+                    const idx = parseInt(draggedElement.dataset.index);
+                    hotbarSlots[idx] = null;
+                } else if (draggedElement && draggedElement.dataset.source === 'crafting_result') {
+                    craftingGrid.fill(null);
+                    renderCraftingGrid();
+                    updateCrafting();
+                }
+
+                // If dropping onto an existing item, swap them (simplified)
+                if (hotbarSlots[i] && draggedElement) {
+                     if (draggedElement.dataset.source === 'inventory') {
+                          inventorySlots[parseInt(draggedElement.dataset.index)] = hotbarSlots[i];
+                     } else if (draggedElement.dataset.source === 'hotbar') {
+                          hotbarSlots[parseInt(draggedElement.dataset.index)] = hotbarSlots[i];
+                     }
+                }
+
                 hotbarSlots[i] = draggedItem;
                 renderHotbar();
+                renderInventorySlots();
                 selectHotbarSlot(activeHotbarIndex); // trigger active block update
+                draggedItem = null;
+                draggedElement = null;
             }
         });
 
@@ -111,28 +151,73 @@ export function selectHotbarSlot(index) {
     renderHotbar();
     if (hotbarSlots[index]) {
         setActiveBlock(hotbarSlots[index]);
+    } else {
+        setActiveBlock(null);
     }
 }
 
-// Setup Inventory available items
-function setupInventoryItems() {
-    const allItems = [...availableItems, ...availableTools];
-    allItems.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'inv-item';
-        div.draggable = true;
+// Setup Inventory actual slots
+function renderInventorySlots() {
+    inventoryItemsEl.innerHTML = '';
 
-        const img = document.createElement('img');
-        img.src = isoTextureCache[item] || textureCache[item];
-        div.appendChild(img);
+    // Add player's personal 3x9 grid
+    for (let i = 0; i < 27; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        slot.dataset.index = i;
 
-        div.addEventListener('dragstart', (e) => {
-            draggedItem = item;
-            e.dataTransfer.setData('text/plain', item);
+        if (inventorySlots[i]) {
+            const item = inventorySlots[i];
+            const img = document.createElement('img');
+            img.src = isoTextureCache[item] || textureCache[item];
+            img.draggable = true;
+            img.dataset.source = 'inventory';
+            img.dataset.index = i;
+
+            img.addEventListener('dragstart', (e) => {
+                draggedItem = item;
+                draggedElement = img;
+            });
+            slot.appendChild(img);
+        }
+
+        // Drop logic
+        slot.addEventListener('dragover', e => e.preventDefault());
+        slot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (draggedItem) {
+                // Clear original slot
+                if (draggedElement && draggedElement.dataset.source === 'inventory') {
+                    const idx = parseInt(draggedElement.dataset.index);
+                    inventorySlots[idx] = null;
+                } else if (draggedElement && draggedElement.dataset.source === 'hotbar') {
+                    const idx = parseInt(draggedElement.dataset.index);
+                    hotbarSlots[idx] = null;
+                } else if (draggedElement && draggedElement.dataset.source === 'crafting_result') {
+                    craftingGrid.fill(null);
+                    renderCraftingGrid();
+                    updateCrafting();
+                }
+
+                // If dropping onto an existing item, swap
+                if (inventorySlots[i] && draggedElement) {
+                     if (draggedElement.dataset.source === 'inventory') {
+                          inventorySlots[parseInt(draggedElement.dataset.index)] = inventorySlots[i];
+                     } else if (draggedElement.dataset.source === 'hotbar') {
+                          hotbarSlots[parseInt(draggedElement.dataset.index)] = inventorySlots[i];
+                     }
+                }
+
+                inventorySlots[i] = draggedItem;
+                renderInventorySlots();
+                renderHotbar();
+                draggedItem = null;
+                draggedElement = null;
+            }
         });
 
-        inventoryItemsEl.appendChild(div);
-    });
+        inventoryItemsEl.appendChild(slot);
+    }
 }
 
 // Setup Crafting Area
@@ -305,21 +390,64 @@ export function updatePlayerStatus(newHealth, newHunger) {
 }
 
 export function addItemToInventory(type) {
-    // Check if it's already in the hotbar (simple prototype approach)
-    // We don't have quantity numbers yet, so just fill empty slots
     let added = false;
+
+    // First try to add to an existing stack in the hotbar
     for (let i = 0; i < 9; i++) {
-        if (!hotbarSlots[i]) {
-            hotbarSlots[i] = type;
+        if (hotbarSlots[i] === type) {
+            // (Assuming we might implement stack counts later, for now just consuming the drop)
             added = true;
-            break;
-        } else if (hotbarSlots[i] === type) {
-            added = true; // "Stacked" visually for now
             break;
         }
     }
+
+    // Then try empty hotbar slots
+    if (!added) {
+        for (let i = 0; i < 9; i++) {
+            if (!hotbarSlots[i]) {
+                hotbarSlots[i] = type;
+                added = true;
+                break;
+            }
+        }
+    }
+
+    // Then try to add to an existing stack in main inventory
+    if (!added) {
+        for (let i = 0; i < 27; i++) {
+            if (inventorySlots[i] === type) {
+                added = true;
+                break;
+            }
+        }
+    }
+
+    // Then try empty main inventory slots
+    if (!added) {
+        for (let i = 0; i < 27; i++) {
+            if (!inventorySlots[i]) {
+                inventorySlots[i] = type;
+                added = true;
+                break;
+            }
+        }
+    }
+
     if (added) {
         renderHotbar();
+        renderInventorySlots();
+    }
+
+    return added; // Can be used by game.js to decide if item despawns or stays on ground
+}
+
+export function removeItemFromHotbar() {
+    // If the active item is consumed
+    if (hotbarSlots[activeHotbarIndex]) {
+        // Without stack sizes, simply empty it
+        hotbarSlots[activeHotbarIndex] = null;
+        renderHotbar();
+        selectHotbarSlot(activeHotbarIndex);
     }
 }
 

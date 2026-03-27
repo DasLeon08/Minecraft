@@ -256,13 +256,14 @@ body {
 }
 
 #inventory-items {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(9, 36px);
+    grid-template-rows: repeat(3, 36px);
     gap: 2px;
     padding: 4px;
 }
 
-.inv-item {
+.inv-slot {
     width: 36px;
     height: 36px;
     background-color: #8b8b8b;

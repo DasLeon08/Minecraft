@@ -948,9 +948,11 @@ function updateItemDrops(delta) {
         // Pickup collision
         if (drop.timeAlive > 0.5 && drop.mesh.position.distanceTo(playerPos) < 1.5) {
             // Add to inventory (we'll just call a UI function)
-            UI.addItemToInventory(drop.type);
-            scene.remove(drop.mesh);
-            itemDrops.splice(i, 1);
+            const added = UI.addItemToInventory(drop.type);
+            if (added) {
+                scene.remove(drop.mesh);
+                itemDrops.splice(i, 1);
+            }
         } else if (drop.timeAlive > 60) {
             // Despawn after 60s
             scene.remove(drop.mesh);
@@ -1024,11 +1026,19 @@ document.addEventListener('mousedown', (event) => {
                     new THREE.Vector3(1, 1, 1)
                 );
 
-                if (!playerBox.intersectsBox(blockBox)) {
-                    setVoxelData(x, y, z, activeBlockType);
-                    updateBlockVisibility(x, y, z);
-                    updateAdjacentBlocksVisibility(x, y, z);
-                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: placeVec, dimension: currentDimension });
+                // Only place block if player holds a block (not a tool/empty)
+                if (activeBlockType && !activeBlockType.includes('pickaxe') && !activeBlockType.includes('axe') && activeBlockType !== 'stick') {
+                    if (!playerBox.intersectsBox(blockBox)) {
+                        setVoxelData(x, y, z, activeBlockType);
+                        updateBlockVisibility(x, y, z);
+                        updateAdjacentBlocksVisibility(x, y, z);
+                        socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: placeVec, dimension: currentDimension });
+
+                        // Consume from inventory in survival mode
+                        if (currentGamemode === 0) {
+                             UI.removeItemFromHotbar();
+                        }
+                    }
                 }
             }
         }
