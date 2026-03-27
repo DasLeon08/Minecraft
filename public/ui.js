@@ -6,7 +6,8 @@ export const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
-    'water', 'lava', 'bedrock', 'snow', 'snow_dirt'
+    'water', 'lava', 'bedrock', 'snow', 'snow_dirt',
+    'obsidian', 'netherrack', 'glowstone', 'nether_brick', 'soul_sand', 'quartz_ore'
 ];
 
 export const availableTools = [

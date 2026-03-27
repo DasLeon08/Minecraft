@@ -15,18 +15,22 @@ let hostId = null; // Track who is the host
 const ops = new Set(); // Player IDs with OP perms
 
 // Store world state as a map of blocks to prevent memory leaks from infinite lists
-// Map key: "x,y,z", value: type (e.g., 'add')
-const worldBlocks = new Map();
+// Dimension -> Map of blocks (key: "x,y,z", value: type)
+const dimensions = {
+    overworld: new Map(),
+    nether: new Map()
+};
 
 // --- Server-Side Mobs ---
 const mobs = {};
 const mobTypes = ['pig', 'zombie', 'cow', 'creeper'];
 
-function spawnMob() {
+function spawnMob(dimension = 'overworld') {
     const id = Math.random().toString(36).substr(2, 9);
     mobs[id] = {
         id: id,
         type: mobTypes[Math.floor(Math.random() * mobTypes.length)],
+        dimension: dimension,
         // Spawn randomly within the world
         position: {
             x: Math.floor(Math.random() * 60) - 30,
@@ -39,7 +43,7 @@ function spawnMob() {
 
 // Initial mobs
 for (let i = 0; i < 5; i++) {
-    spawnMob();
+    spawnMob('overworld');
 }
 
 // --- Server Time (Day/Night) ---
@@ -63,12 +67,12 @@ setInterval(() => {
     const playerIds = Object.keys(players);
     Object.values(mobs).forEach(mob => {
         if (mob.type === 'zombie' || mob.type === 'creeper') {
-            // Find closest player
+            // Find closest player in the same dimension
             let closestDist = Infinity;
             let closestPlayer = null;
             playerIds.forEach(id => {
                 const p = players[id];
-                if (p.gamemode !== 0) return; // Only chase Survival players
+                if (p.gamemode !== 0 || p.dimension !== mob.dimension) return; // Only chase Survival players in same dimension
                 const dx = p.position.x - mob.position.x;
                 const dy = p.position.y - mob.position.y;
                 const dz = p.position.z - mob.position.z;
@@ -124,10 +128,15 @@ setInterval(() => {
 
     // Periodically spawn new mobs at night or randomly
     if (isNight && Math.random() < 0.1 && Object.keys(mobs).length < 25) {
-        spawnMob();
+        spawnMob('overworld');
     } else if (!isNight && Math.random() < 0.02 && Object.keys(mobs).length < 15) {
         // Spawn passive mobs during the day
-        spawnMob();
+        spawnMob('overworld');
+    }
+
+    // Spawn nether mobs
+    if (Math.random() < 0.05) {
+        spawnMob('nether');
     }
 
     // Broadcast mob and time update to all clients
@@ -149,7 +158,8 @@ io.on('connection', (socket) => {
         id: socket.id,
         position: { x: 0, y: 2, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
-        gamemode: 0 // 0: Survival, 1: Creative, 2: Spectator
+        gamemode: 0, // 0: Survival, 1: Creative, 2: Spectator
+        dimension: 'overworld'
     };
 
     if (socket.id === hostId) {
@@ -160,13 +170,17 @@ io.on('connection', (socket) => {
     socket.emit('currentPlayers', players);
     socket.emit('serverTick', { mobs, timeOfDay });
     // Convert map to array for initial sync
-    const currentWorld = Array.from(worldBlocks.entries()).map(([key, value]) => {
-        const [x, y, z] = key.split(',').map(Number);
-        if (value === 'remove') {
-             return { action: 'remove', position: { x, y, z } };
-        } else {
-             return { action: 'add', blockType: value, position: { x, y, z } };
-        }
+    const currentWorld = [];
+    Object.keys(dimensions).forEach(dim => {
+        const dimWorld = Array.from(dimensions[dim].entries()).map(([key, value]) => {
+            const [x, y, z] = key.split(',').map(Number);
+            if (value === 'remove') {
+                 return { action: 'remove', position: { x, y, z }, dimension: dim };
+            } else {
+                 return { action: 'add', blockType: value, position: { x, y, z }, dimension: dim };
+            }
+        });
+        currentWorld.push(...dimWorld);
     });
     socket.emit('worldState', currentWorld);
 
@@ -177,10 +191,25 @@ io.on('connection', (socket) => {
         if(players[socket.id]) {
             players[socket.id].position = movementData.position;
             players[socket.id].rotation = movementData.rotation;
+            if (movementData.dimension) {
+                players[socket.id].dimension = movementData.dimension;
+            }
 
             // Broadcast movement to others
             socket.broadcast.emit('playerMoved', players[socket.id]);
         }
+    });
+
+    socket.on('requestWorldState', (dimension) => {
+        const dimWorld = Array.from(dimensions[dimension].entries()).map(([key, value]) => {
+            const [x, y, z] = key.split(',').map(Number);
+            if (value === 'remove') {
+                 return { action: 'remove', position: { x, y, z }, dimension: dimension };
+            } else {
+                 return { action: 'add', blockType: value, position: { x, y, z }, dimension: dimension };
+            }
+        });
+        socket.emit('dimensionWorldState', dimWorld);
     });
 
     // The host client simulates physics for the server's mobs and sends back the true Y coordinates
@@ -195,17 +224,18 @@ io.on('connection', (socket) => {
     });
 
     socket.on('updateBlock', (blockData) => {
-        // blockData: { action: 'add'/'remove', position: {x,y,z}, blockType: 'grass' }
+        // blockData: { action: 'add'/'remove', position: {x,y,z}, blockType: 'grass', dimension: 'overworld' }
+        const dim = blockData.dimension || 'overworld';
         const key = `${blockData.position.x},${blockData.position.y},${blockData.position.z}`;
 
         if (blockData.action === 'add') {
-            worldBlocks.set(key, blockData.blockType);
+            dimensions[dim].set(key, blockData.blockType);
         } else if (blockData.action === 'remove') {
             // Store the removal so late joiners also remove initial terrain
-            worldBlocks.set(key, 'remove');
+            dimensions[dim].set(key, 'remove');
         }
 
-        // Broadcast to everyone else
+        // Broadcast to everyone else (filtering by dimension can be done client-side or server-side, we'll let client filter to simplify state)
         socket.broadcast.emit('blockUpdated', blockData);
     });
 
@@ -250,6 +280,18 @@ io.on('connection', (socket) => {
             } else {
                 socket.emit('chatCommandResponse', "Player not found.");
             }
+        } else if (cmd === '/nether' || cmd === '/overworld') {
+            const dim = cmd === '/nether' ? 'nether' : 'overworld';
+            let targetId = socket.id;
+            if (args[1] && players[args[1]]) {
+                targetId = args[1];
+            }
+            players[targetId].dimension = dim;
+            // Teleport them
+            players[targetId].position = { x: 0, y: 35, z: 0 };
+
+            io.to(targetId).emit('changeDimension', { dimension: dim, position: players[targetId].position });
+            socket.emit('chatCommandResponse', `Teleported ${targetId.substring(0,5)} to ${dim}.`);
         } else {
             socket.emit('chatCommandResponse', "Unknown command.");
         }

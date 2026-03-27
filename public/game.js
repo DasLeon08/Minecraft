@@ -11,6 +11,8 @@ import { noise } from './noise.js';
 
 const socket = io(); // Connect to Socket.IO
 
+let currentDimension = 'overworld'; // 'overworld' or 'nether'
+
 // Basic setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x7ec0ee); // More realistic sky blue // Richer sky blue
@@ -160,7 +162,13 @@ export const blockMaterials = {
     diamond_ore: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.5, map: loadTex('diamond_ore') }),
     water: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.1, map: loadTex('water'), transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
     lava: new THREE.MeshBasicMaterial({ map: loadTex('lava'), color: 0xffffff }), // Lava emits light visually so use Basic
-    bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') })
+    bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') }),
+    obsidian: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.4, map: loadTex('obsidian') }),
+    netherrack: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('netherrack') }),
+    glowstone: new THREE.MeshBasicMaterial({ map: loadTex('glowstone'), color: 0xfffcc0 }), // Emits light like lava
+    nether_brick: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('nether_brick') }),
+    soul_sand: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('soul_sand') }),
+    quartz_ore: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('quartz_ore') })
 };
 
 
@@ -412,124 +420,169 @@ function updateAdjacentBlocksVisibility(x, y, z) {
     updateBlockVisibility(x, y, z - 1);
 }
 
-// Generate the initial world map
-for (let x = -worldSize / 2; x < worldSize / 2; x++) {
-    for (let z = -worldSize / 2; z < worldSize / 2; z++) {
-        // Heightmap via 2D noise with dramatic mountainous terrain
-        const baseNoise = noise.fbm2D(x * 0.015, z * 0.015, 5, 0.5, 2.0); // Continental noise
-        const detailNoise = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0); // Detail bumps
-
-        // Exponentiate the base noise to create flat valleys and steep mountains
-        // Adding 1 before squaring/cubing ensures we don't zero out negative values poorly
-        const elevation = Math.pow(Math.abs(baseNoise) * 2.5, 2.5) * Math.sign(baseNoise);
-
-        // Combine low-frequency dramatic elevation with high-frequency detail
-        let rawHeight = (elevation * 30) + (detailNoise * 8) - 10;
-
-        // Make sure it doesn't go below bedrock
-        rawHeight = Math.max(rawHeight, worldDepth + 1);
-
-        const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
-
-        // Biome mapping via temperature/moisture 2D noise
-        // fbm2D returns 0 to 1, so we map it to -1 to 1 for our logic
-        const tempNoise = (noise.fbm2D(x * 0.02, z * 0.02, 3, 0.5, 2.0) * 2.0) - 1.0;
-        const moistureNoise = (noise.fbm2D(x * 0.02 + 100, z * 0.02 + 100, 3, 0.5, 2.0) * 2.0) - 1.0;
-
-        let biome = 'forest';
-        if (tempNoise > 0.3 && moistureNoise < 0.2) {
-            biome = 'desert';
-        } else if (tempNoise < -0.3) {
-            biome = 'snow';
-        }
-
-        // Determine surface block type based on height and biome
-        let surfaceBlock = 'grass';
-        if (y < -2.5) {
-            surfaceBlock = 'sand'; // Beach/ocean floor level
-        } else if (y > 35.5) {
-            surfaceBlock = 'snow'; // Very high mountain peaks
-        } else if (y > 22.5) {
-            surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
-        } else if (y > 15.5) {
-            surfaceBlock = 'stone'; // Rocky mountain sides
-        } else {
-            // Apply biome mapping
-            if (biome === 'desert') surfaceBlock = 'sand';
-            if (biome === 'snow') surfaceBlock = 'snow';
-        }
-
-        // Generate deep world layer by layer
-        // y is offset by 0.5 (e.g. 2.5), so the highest integer currentY reaches is Math.floor(y) = y - 0.5.
-        const topY = y - 0.5;
-        for (let currentY = worldDepth; currentY <= topY; currentY++) {
-            let blockType = 'stone';
-
-            // Bottom layer
-            if (currentY === worldDepth) {
-                blockType = 'bedrock';
-            } else if (currentY === topY) {
-                // Surface
-                blockType = surfaceBlock;
-            } else if (currentY > topY - 3 && surfaceBlock === 'grass') {
-                blockType = 'dirt';
-            } else if (currentY > topY - 3 && surfaceBlock === 'sand') {
-                blockType = 'sand';
-            } else if (currentY > topY - 3 && surfaceBlock === 'snow') {
-                blockType = 'dirt';
-            } else {
-                // Stone layer - check for caves and ores
-                const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
-                if (caveNoise > 0.65) {
-                    // Lava pools at bottom of caves if very deep
-                    if (currentY < worldDepth + 5 && currentY > worldDepth) {
-                        setVoxelData(x, currentY, z, 'lava');
+function generateTerrain(dimension) {
+    // Generate the initial world map based on dimension
+    for (let x = -worldSize / 2; x < worldSize / 2; x++) {
+        for (let z = -worldSize / 2; z < worldSize / 2; z++) {
+            if (dimension === 'nether') {
+                // Nether terrain: ceiling and floor with massive caves
+                for (let y = worldDepth; y <= 35; y++) {
+                    // Bedrock at very bottom and very top
+                    if (y === worldDepth || y === 35) {
+                        setVoxelData(x, y, z, 'bedrock');
+                        continue;
                     }
-                    continue; // Cave (air)
+
+                    // 3D noise for cavernous generation
+                    const caveNoise = noise.noise3D(x * 0.05, y * 0.05, z * 0.05);
+                    if (caveNoise > 0.4) {
+                        // Empty space (huge caves)
+                        continue;
+                    }
+
+                    let blockType = 'netherrack';
+
+                    // Add lava pools at the bottom
+                    if (y <= worldDepth + 4 && caveNoise > 0.4) {
+                        blockType = 'lava';
+                    }
+
+                    // Small clusters of other blocks
+                    if (Math.random() < 0.05) blockType = 'quartz_ore';
+                    else if (Math.random() < 0.02) blockType = 'glowstone';
+                    else if (y < worldDepth + 10 && Math.random() < 0.03) blockType = 'soul_sand';
+                    else if (Math.random() < 0.01) blockType = 'obsidian';
+
+                    setVoxelData(x, y, z, blockType);
+                }
+            } else {
+                // Overworld terrain
+                // Heightmap via 2D noise with dramatic mountainous terrain
+                const baseNoise = noise.fbm2D(x * 0.015, z * 0.015, 5, 0.5, 2.0); // Continental noise
+                const detailNoise = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0); // Detail bumps
+
+                // Exponentiate the base noise to create flat valleys and steep mountains
+                // Adding 1 before squaring/cubing ensures we don't zero out negative values poorly
+                const elevation = Math.pow(Math.abs(baseNoise) * 2.5, 2.5) * Math.sign(baseNoise);
+
+                // Combine low-frequency dramatic elevation with high-frequency detail
+                let rawHeight = (elevation * 30) + (detailNoise * 8) - 10;
+
+                // Make sure it doesn't go below bedrock
+                rawHeight = Math.max(rawHeight, worldDepth + 1);
+
+                const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
+
+                // Biome mapping via temperature/moisture 2D noise
+                // fbm2D returns 0 to 1, so we map it to -1 to 1 for our logic
+                const tempNoise = (noise.fbm2D(x * 0.02, z * 0.02, 3, 0.5, 2.0) * 2.0) - 1.0;
+                const moistureNoise = (noise.fbm2D(x * 0.02 + 100, z * 0.02 + 100, 3, 0.5, 2.0) * 2.0) - 1.0;
+
+                let biome = 'forest';
+                if (tempNoise > 0.3 && moistureNoise < 0.2) {
+                    biome = 'desert';
+                } else if (tempNoise < -0.3) {
+                    biome = 'snow';
                 }
 
-                // Ores
-                if (Math.random() < 0.04) {
-                    const depthPercent = (currentY - worldDepth) / (y - worldDepth);
-                    if (depthPercent < 0.2 && Math.random() < 0.1) blockType = 'diamond_ore';
-                    else if (depthPercent < 0.4 && Math.random() < 0.2) blockType = 'gold_ore';
-                    else if (depthPercent < 0.7 && Math.random() < 0.3) blockType = 'iron_ore';
-                    else if (Math.random() < 0.5) blockType = 'coal_ore';
+                // Determine surface block type based on height and biome
+                let surfaceBlock = 'grass';
+                if (y < -2.5) {
+                    surfaceBlock = 'sand'; // Beach/ocean floor level
+                } else if (y > 35.5) {
+                    surfaceBlock = 'snow'; // Very high mountain peaks
+                } else if (y > 22.5) {
+                    surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
+                } else if (y > 15.5) {
+                    surfaceBlock = 'stone'; // Rocky mountain sides
+                } else {
+                    // Apply biome mapping
+                    if (biome === 'desert') surfaceBlock = 'sand';
+                    if (biome === 'snow') surfaceBlock = 'snow';
                 }
-            }
 
-            setVoxelData(x, currentY, z, blockType);
-        }
+                // Generate deep world layer by layer
+                // y is offset by 0.5 (e.g. 2.5), so the highest integer currentY reaches is Math.floor(y) = y - 0.5.
+                const topY = y - 0.5;
+                for (let currentY = worldDepth; currentY <= topY; currentY++) {
+                    let blockType = 'stone';
 
-        // Generate Water
-        const waterLevel = -3; // Needs to be integer
-        // Fill water up to waterLevel if surface is below it
-        for(let wy = topY + 1; wy <= waterLevel; wy++) {
-            setVoxelData(x, wy, z, 'water');
-        }
+                    // Bottom layer
+                    if (currentY === worldDepth) {
+                        blockType = 'bedrock';
+                    } else if (currentY === topY) {
+                        // Surface
+                        blockType = surfaceBlock;
+                    } else if (currentY > topY - 3 && surfaceBlock === 'grass') {
+                        blockType = 'dirt';
+                    } else if (currentY > topY - 3 && surfaceBlock === 'sand') {
+                        blockType = 'sand';
+                    } else if (currentY > topY - 3 && surfaceBlock === 'snow') {
+                        blockType = 'dirt';
+                    } else {
+                        // Stone layer - check for caves and ores
+                        const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
+                        if (caveNoise > 0.65) {
+                            // Lava pools at bottom of caves if very deep
+                            if (currentY < worldDepth + 5 && currentY > worldDepth) {
+                                setVoxelData(x, currentY, z, 'lava');
+                            }
+                            continue; // Cave (air)
+                        }
 
-        // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
-        const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
-        const treeChance = biome === 'forest' ? 0.05 : (biome === 'snow' ? 0.01 : 0.00); // No trees in desert
-        if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
-            const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
-            for (let i = 1; i <= treeHeight; i++) {
-                setVoxelData(x, topY + i, z, 'wood');
-            }
-            // Leaves
-            const leafType = biome === 'snow' ? 'leaves' : 'leaves'; // Maybe frosty leaves later
-            for (let lx = -2; lx <= 2; lx++) {
-                for (let lz = -2; lz <= 2; lz++) {
-                    for (let ly = 0; ly <= 1; ly++) {
-                        if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 1) continue; // rounded corners
-                        if (lx === 0 && lz === 0 && ly === 0) continue; // trunk space
-                        setVoxelData(x + lx, y + treeHeight - 1 + ly, z + lz, leafType);
+                        // Ores
+                        if (Math.random() < 0.04) {
+                            const depthPercent = (currentY - worldDepth) / (y - worldDepth);
+                            if (depthPercent < 0.2 && Math.random() < 0.1) blockType = 'diamond_ore';
+                            else if (depthPercent < 0.4 && Math.random() < 0.2) blockType = 'gold_ore';
+                            else if (depthPercent < 0.7 && Math.random() < 0.3) blockType = 'iron_ore';
+                            else if (Math.random() < 0.5) blockType = 'coal_ore';
+                        }
+                    }
+
+                    setVoxelData(x, currentY, z, blockType);
+                }
+
+                // Generate Water
+                const waterLevel = -3; // Needs to be integer
+                // Fill water up to waterLevel if surface is below it
+                for(let wy = topY + 1; wy <= waterLevel; wy++) {
+                    setVoxelData(x, wy, z, 'water');
+                }
+
+                // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
+                const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
+                const treeChance = biome === 'forest' ? 0.05 : (biome === 'snow' ? 0.01 : 0.00); // No trees in desert
+                if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
+                    const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
+
+                    // Trunk
+                    for(let i = 1; i <= treeHeight; i++) {
+                        setVoxelData(x, topY + i, z, 'wood');
+                    }
+
+                    // Leaves (simple 3x3 box at the top, slightly randomized)
+                    const leavesTop = topY + treeHeight;
+                    for (let lx = -1; lx <= 1; lx++) {
+                        for (let ly = -1; ly <= 1; ly++) {
+                            for (let lz = -1; lz <= 1; lz++) {
+                                // Skip corners for a more natural shape
+                                if (Math.abs(lx) === 1 && Math.abs(ly) === 1 && Math.abs(lz) === 1) continue;
+                                // Skip trunk location unless it's the very top leaf
+                                if (lx === 0 && lz === 0 && ly < 1) continue;
+
+                                setVoxelData(x + lx, leavesTop + ly, z + lz, 'leaves');
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+// Generate the initial world map
+generateTerrain('overworld');
 
 // Render visible blocks
 worldData.forEach((type, key) => {
@@ -699,7 +752,66 @@ socket.on('blockUpdated', (update) => {
     applyBlockUpdate(update);
 });
 
+socket.on('changeDimension', (data) => {
+    console.log(`Switching to dimension: ${data.dimension}`);
+    currentDimension = data.dimension;
+
+    // Clear current world visually and functionally
+    worldData.clear();
+    const blocksToRemove = Array.from(renderedBlocks.keys());
+    blocksToRemove.forEach(key => {
+        const [bx, by, bz] = key.split(',').map(Number);
+        removeRenderedBlock(bx, by, bz);
+    });
+    renderedBlocks.clear();
+
+    // Reposition player
+    camera.position.set(data.position.x, data.position.y, data.position.z);
+    velocity.set(0, 0, 0);
+
+    // Change lighting/environment based on dimension
+    if (currentDimension === 'nether') {
+        scene.background = new THREE.Color(0x3a0000); // Dark red
+        scene.fog.color.setHex(0x3a0000);
+        scene.fog.density = 0.02; // Thicker fog in nether
+        directionalLight.intensity = 0.1;
+        hemiLight.color.setHex(0xff3333);
+        hemiLight.groundColor.setHex(0x110000);
+        hemiLight.intensity = 0.5;
+    } else {
+        scene.background = new THREE.Color(0x7ec0ee); // Sky blue
+        scene.fog.color.setHex(0x7ec0ee);
+        scene.fog.density = 0.006;
+        directionalLight.intensity = 0.8;
+        hemiLight.color.setHex(0xffffff);
+        hemiLight.groundColor.setHex(0x444444);
+        hemiLight.intensity = 0.6;
+    }
+
+    // Generate base terrain for the new dimension locally
+    generateTerrain(currentDimension);
+
+    // Render the new base terrain
+    worldData.forEach((type, key) => {
+        const [x, y, z] = key.split(',').map(Number);
+        if (shouldRenderBlock(x, y, z, type)) {
+            renderBlock(x, y, z, type);
+        }
+    });
+
+    // Request new chunks/data (handled by server broadcasting updates if needed,
+    // or we can explicitly ask the server for worldState for this dimension)
+    socket.emit('requestWorldState', currentDimension);
+});
+
+socket.on('dimensionWorldState', (updates) => {
+    updates.forEach(update => applyBlockUpdate(update));
+});
+
 function applyBlockUpdate(data) {
+    // Only apply updates for our current dimension
+    if (data.dimension && data.dimension !== currentDimension) return;
+
     const x = Math.round(data.position.x);
     const y = data.position.y; // n.5
     const z = Math.round(data.position.z);
@@ -876,7 +988,7 @@ document.addEventListener('mousedown', (event) => {
                     worldData.delete(getBlockKey(x, y, z));
                     updateBlockVisibility(x, y, z);
                     updateAdjacentBlocksVisibility(x, y, z);
-                    socket.emit('updateBlock', { action: 'remove', position: pos });
+                    socket.emit('updateBlock', { action: 'remove', position: pos, dimension: currentDimension });
                 }
             } else if (event.button === 2) {
                 // Place block
@@ -901,7 +1013,7 @@ document.addEventListener('mousedown', (event) => {
                     setVoxelData(x, y, z, activeBlockType);
                     updateBlockVisibility(x, y, z);
                     updateAdjacentBlocksVisibility(x, y, z);
-                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: placeVec });
+                    socket.emit('updateBlock', { action: 'add', blockType: activeBlockType, position: placeVec, dimension: currentDimension });
                 }
             }
         }
@@ -1061,7 +1173,8 @@ function animate() {
         if(velocity.x !== 0 || velocity.y !== 0 || velocity.z !== 0) {
              socket.emit('playerMovement', {
                  position: controls.getObject().position,
-                 rotation: controls.getObject().rotation // simplistic
+                 rotation: controls.getObject().rotation, // simplistic
+                 dimension: currentDimension
              });
         }
     }
@@ -1088,34 +1201,36 @@ function animate() {
     moonMesh.position.set(-sunX, -sunY, 100);
 
     // Calculate light intensities based on sun height
-    const normalizedSunHeight = Math.sin(timeOfDay); // 1 = noon, 0 = sunrise/sunset, -1 = midnight
+    if (currentDimension !== 'nether') {
+        const normalizedSunHeight = Math.sin(timeOfDay); // 1 = noon, 0 = sunrise/sunset, -1 = midnight
 
-    if (normalizedSunHeight > 0) {
-        // Day
-        directionalLight.position.copy(sunMesh.position);
-        directionalLight.intensity = Math.max(0.1, normalizedSunHeight * 2.0);
-        directionalLight.color.setHex(0xfffaec);
-        ambientLight.intensity = Math.max(0.1, normalizedSunHeight * 0.45);
-        hemiLight.intensity = Math.max(0.1, normalizedSunHeight * 0.7);
+        if (normalizedSunHeight > 0) {
+            // Day
+            directionalLight.position.copy(sunMesh.position);
+            directionalLight.intensity = Math.max(0.1, normalizedSunHeight * 2.0);
+            directionalLight.color.setHex(0xfffaec);
+            ambientLight.intensity = Math.max(0.1, normalizedSunHeight * 0.45);
+            hemiLight.intensity = Math.max(0.1, normalizedSunHeight * 0.7);
 
-        // Sky colors (Blue -> Orange at horizon -> Blue)
-        const skyR = Math.min(1.0, 0.49 + (1.0 - normalizedSunHeight) * 0.5); // Reddish at horizon
-        const skyG = Math.max(0.4, 0.75 - (1.0 - normalizedSunHeight) * 0.3);
-        const skyB = 0.93;
-        scene.background.setRGB(skyR, skyG, skyB);
-        scene.fog.color.setRGB(skyR, skyG, skyB);
-    } else {
-        // Night
-        directionalLight.position.copy(moonMesh.position);
-        directionalLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.3); // Dim moonlight
-        directionalLight.color.setHex(0xaaaaee);
-        ambientLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.1);
-        hemiLight.intensity = 0.05;
+            // Sky colors (Blue -> Orange at horizon -> Blue)
+            const skyR = Math.min(1.0, 0.49 + (1.0 - normalizedSunHeight) * 0.5); // Reddish at horizon
+            const skyG = Math.max(0.4, 0.75 - (1.0 - normalizedSunHeight) * 0.3);
+            const skyB = 0.93;
+            scene.background.setRGB(skyR, skyG, skyB);
+            scene.fog.color.setRGB(skyR, skyG, skyB);
+        } else {
+            // Night
+            directionalLight.position.copy(moonMesh.position);
+            directionalLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.3); // Dim moonlight
+            directionalLight.color.setHex(0xaaaaee);
+            ambientLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.1);
+            hemiLight.intensity = 0.05;
 
-        // Night Sky (Dark Blue/Black)
-        const depth = -normalizedSunHeight; // 0 to 1
-        scene.background.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
-        scene.fog.color.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
+            // Night Sky (Dark Blue/Black)
+            const depth = -normalizedSunHeight; // 0 to 1
+            scene.background.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
+            scene.fog.color.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
+        }
     }
 
     updateItemDrops(delta);

@@ -149,7 +149,13 @@ export function generateTexture(type) {
         lava: ['#e85f1c', '#f58727', '#d63c0f', '#fce230'], // Lava reds/oranges
         bedrock: ['#333333', '#222222', '#111111', '#444444', '#000000'], // Very dark scattered
         snow: ['#ffffff', '#f2f2f2', '#e6e6e6', '#d9d9d9'], // Snow/Ice colors
-        dirt_snow_side: ['#866043', '#79553a', '#966c4a'] // Base is dirt, snow top added later
+        dirt_snow_side: ['#866043', '#79553a', '#966c4a'], // Base is dirt, snow top added later
+        obsidian: ['#140f1a', '#1e1428', '#2d1e3d', '#3d284d'], // Dark purple/black
+        netherrack: ['#612121', '#752b2b', '#8a3333', '#521c1c'], // Fleshy red/brown
+        glowstone: ['#ffcc66', '#ffdb99', '#ffb366', '#ff9933'], // Bright yellow/orange
+        nether_brick: ['#2e151b', '#3d1c24', '#4c232d'], // Dark purplish-red brick
+        soul_sand: ['#544033', '#403026', '#30241d'], // Wavy dark brown
+        quartz_ore: ['#612121', '#752b2b', '#8a3333', '#ffffff', '#e6e6e6'] // Netherrack + white
     };
 
     const scheme = colors[type] || colors.dirt;
@@ -196,11 +202,21 @@ export function generateTexture(type) {
              ctx.fillRect(0, y, 16, 1);
              ctx.fillRect(y + (y % 8 === 0 ? 0 : 4), y, 1, 4); // staggered verticals
         }
-    } else if (type === 'brick') {
-        ctx.fillStyle = '#DDDDDD'; // light mortar
+    } else if (type === 'brick' || type === 'nether_brick') {
+        ctx.fillStyle = type === 'brick' ? '#DDDDDD' : '#221014'; // light or dark mortar
         for (let y = 0; y < 16; y += 4) {
              ctx.fillRect(0, y, 16, 1);
              ctx.fillRect(y + (y % 8 === 0 ? 0 : 8), y, 1, 4); // staggered brick verticals
+        }
+    } else if (type === 'obsidian') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(2, 2, 2, 8); // fake glassy reflection
+    } else if (type === 'soul_sand') {
+        ctx.fillStyle = '#1f1610';
+        for(let i=0; i<10; i++) {
+             // fake little spooky faces
+             ctx.fillRect(Math.floor(Math.random()*14), Math.floor(Math.random()*14), 2, 1);
+             ctx.fillRect(Math.floor(Math.random()*14), Math.floor(Math.random()*14), 1, 2);
         }
     } else if (type === 'glass') {
         // clear middle with rim
