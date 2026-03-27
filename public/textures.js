@@ -141,6 +141,10 @@ export function generateTexture(type) {
         glass: ['#cbe8e8', '#b8d9d9', '#deffff'],
         cobblestone: ['#666666', '#555555', '#777777'],
         brick: ['#a35348', '#8f493f', '#b85e51'],
+        gravel: ['#807c7c', '#6e6b6b', '#918d8d', '#575555'],
+        bookshelf: ['#b38b55', '#a37e4d', '#c2975e'], // Oak planks base, books added later
+        lapis_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#2954a3', '#1e3e7a'], // Blue specks
+        redstone_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#a31e1e', '#e62e2e'], // Red specks
         coal_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#1a1a1a', '#2b2b2b'],
         iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d9af86', '#e6c3a1'],
         gold_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#fcee4b', '#e6d845'],
@@ -207,6 +211,27 @@ export function generateTexture(type) {
         for (let y = 0; y < 16; y += 4) {
              ctx.fillRect(0, y, 16, 1);
              ctx.fillRect(y + (y % 8 === 0 ? 0 : 8), y, 1, 4); // staggered brick verticals
+        }
+    } else if (type === 'bookshelf') {
+        // Bookshelf styling over plank background
+        ctx.fillStyle = '#4e3318'; // dark wood borders
+        ctx.fillRect(0, 0, 16, 2);
+        ctx.fillRect(0, 7, 16, 2);
+        ctx.fillRect(0, 14, 16, 2);
+
+        // Draw colorful books
+        const bookColors = ['#9e2a2a', '#2a9e33', '#2a3b9e', '#9e8c2a', '#6a2a9e', '#9e672a', '#d9d9d9'];
+        for (let y = 2; y <= 8; y += 7) { // Top shelf and bottom shelf start Y
+            for (let x = 1; x < 15; x += 2 + Math.floor(Math.random() * 2)) {
+                ctx.fillStyle = bookColors[Math.floor(Math.random() * bookColors.length)];
+                ctx.fillRect(x, y, 2 + Math.floor(Math.random()*1), 5); // book width 2-3, height 5
+            }
+        }
+    } else if (type === 'gravel') {
+        // Gravel is a bit noisier than plain noise, maybe add bigger pebbles
+        ctx.fillStyle = '#403d3d';
+        for(let i=0; i<15; i++) {
+            ctx.fillRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2);
         }
     } else if (type === 'obsidian') {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';

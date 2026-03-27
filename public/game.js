@@ -156,10 +156,21 @@ export const blockMaterials = {
     glass: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.3, map: loadTex('glass'), transparent: true, opacity: 0.6 }),
     cobblestone: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('cobblestone') }),
     brick: new THREE.MeshStandardMaterial({ roughness: 0.7, map: loadTex('brick') }),
+    gravel: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('gravel') }),
+    bookshelf: [
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('bookshelf') }), // right
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('bookshelf') }), // left
+        new THREE.MeshStandardMaterial({ roughness: 0.6, map: loadTex('planks') }), // top
+        new THREE.MeshStandardMaterial({ roughness: 0.6, map: loadTex('planks') }), // bottom
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('bookshelf') }), // front
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('bookshelf') })  // back
+    ],
     coal_ore: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('coal_ore') }),
     iron_ore: new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.2, map: loadTex('iron_ore') }),
     gold_ore: new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.4, map: loadTex('gold_ore') }),
     diamond_ore: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.5, map: loadTex('diamond_ore') }),
+    lapis_ore: new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.3, map: loadTex('lapis_ore') }),
+    redstone_ore: new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.2, map: loadTex('redstone_ore') }),
     water: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.1, map: loadTex('water'), transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
     lava: new THREE.MeshBasicMaterial({ map: loadTex('lava'), color: 0xffffff }), // Lava emits light visually so use Basic
     bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') }),
@@ -530,13 +541,17 @@ function generateTerrain(dimension) {
                             continue; // Cave (air)
                         }
 
-                        // Ores
-                        if (Math.random() < 0.04) {
+                        // Ores and other underground blocks
+                        if (Math.random() < 0.06) { // slightly increased frequency for new blocks
                             const depthPercent = (currentY - worldDepth) / (y - worldDepth);
                             if (depthPercent < 0.2 && Math.random() < 0.1) blockType = 'diamond_ore';
+                            else if (depthPercent < 0.25 && Math.random() < 0.15) blockType = 'redstone_ore';
+                            else if (depthPercent < 0.3 && Math.random() < 0.1) blockType = 'lapis_ore';
                             else if (depthPercent < 0.4 && Math.random() < 0.2) blockType = 'gold_ore';
                             else if (depthPercent < 0.7 && Math.random() < 0.3) blockType = 'iron_ore';
-                            else if (Math.random() < 0.5) blockType = 'coal_ore';
+                            else if (Math.random() < 0.4) blockType = 'coal_ore';
+                            else if (Math.random() < 0.3) blockType = 'gravel';
+                            else if (Math.random() < 0.1) blockType = 'dirt'; // occasional dirt pocket underground
                         }
                     }
 
@@ -947,7 +962,7 @@ function updateItemDrops(delta) {
 function canHarvest(blockType, activeTool) {
     if (currentGamemode === 1) return true; // Creative mode always harvests
 
-    const needsPickaxe = ['stone', 'cobblestone', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore'];
+    const needsPickaxe = ['stone', 'cobblestone', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'lapis_ore', 'redstone_ore', 'obsidian', 'netherrack', 'nether_brick', 'quartz_ore', 'brick'];
     if (needsPickaxe.includes(blockType)) {
         return activeTool && activeTool.includes('pickaxe');
     }

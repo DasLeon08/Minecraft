@@ -5,7 +5,8 @@ import { setActiveBlock } from './game.js';
 export const availableItems = [
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
-    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore',
+    'gravel', 'bookshelf',
+    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'lapis_ore', 'redstone_ore',
     'water', 'lava', 'bedrock', 'snow', 'snow_dirt',
     'obsidian', 'netherrack', 'glowstone', 'nether_brick', 'soul_sand', 'quartz_ore'
 ];
