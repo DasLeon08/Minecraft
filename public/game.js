@@ -179,8 +179,26 @@ export const blockMaterials = {
     glowstone: new THREE.MeshBasicMaterial({ map: loadTex('glowstone'), color: 0xfffcc0 }), // Emits light like lava
     nether_brick: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('nether_brick') }),
     soul_sand: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('soul_sand') }),
-    quartz_ore: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('quartz_ore') })
+    quartz_ore: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('quartz_ore') }),
+    redstone_dust: new THREE.MeshBasicMaterial({ map: loadTex('redstone_dust'), color: 0xffaaaa, transparent: true, opacity: 0.9 }), // Glows
+    redstone_lamp: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.2, map: loadTex('redstone_lamp') }),
+    redstone_lamp_on: new THREE.MeshBasicMaterial({ map: loadTex('redstone_lamp'), color: 0xffdd88 }), // Emits light when active
+    furnace: [
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_side') }), // right
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_side') }), // left
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_side') }), // top
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_side') }), // bottom
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_front') }), // front
+        new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('furnace_side') })  // back
+    ],
+    iron_ingot: new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.8, map: loadTex('iron_ingot'), transparent: true }),
+    gold_ingot: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 1.0, map: loadTex('gold_ingot'), transparent: true }),
+    diamond: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.8, map: loadTex('diamond'), transparent: true }),
+    coal: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('coal'), transparent: true })
 };
+
+export const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+const dustGeometry = new THREE.BoxGeometry(1, 0.1, 1); // flat wire
 
 
 // Set nearest filter for pixel art look
@@ -253,6 +271,16 @@ const onKeyDown = (event) => {
             case 'KeyD':
                 moveRight = true;
                 break;
+            case 'KeyF':
+                // Check if looking at furnace
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(objects, false);
+                if (intersects.length > 0 && intersects[0].distance < 8) {
+                    if (intersects[0].object.userData.type === 'furnace') {
+                        UI.toggleFurnace(controls);
+                    }
+                }
+                break;
             case 'Space':
                 // Check if in liquid for swimming
                 const pPosJump = controls.getObject().position;
@@ -282,8 +310,14 @@ const onKeyDown = (event) => {
             inventoryEl.style.display = 'block';
         } else {
             inventoryEl.style.display = 'none';
+            document.getElementById('furnace-ui').style.display = 'none';
             controls.lock();
         }
+    }
+
+    if (event.code === 'Escape') {
+        inventoryEl.style.display = 'none';
+        document.getElementById('furnace-ui').style.display = 'none';
     }
 
     if (event.code === 'KeyT' && controls.isLocked && !isChatting) {
@@ -338,7 +372,6 @@ document.addEventListener('keydown', onKeyDown);
 document.addEventListener('keyup', onKeyUp);
 
 // --- Voxel Data Structure & Hidden Surface Removal ---
-const geometry = new THREE.BoxGeometry(1, 1, 1);
 const objects = []; // Active meshes for raycasting
 export const worldData = new Map(); // x,y,z -> type
 const renderedBlocks = new Map(); // x,y,z -> THREE.Mesh
@@ -387,10 +420,11 @@ function renderBlock(x, y, z, type) {
     if (renderedBlocks.has(key)) return; // Already rendered
 
     const material = blockMaterials[type] || blockMaterials['dirt'];
-    const voxel = new THREE.Mesh(geometry, material);
-    voxel.position.set(x, y, z);
+    const currentGeo = type === 'redstone_dust' ? dustGeometry : blockGeometry;
+    const voxel = new THREE.Mesh(currentGeo, material);
+    voxel.position.set(x, type === 'redstone_dust' ? y - 0.45 : y, z);
     voxel.receiveShadow = true;
-    voxel.castShadow = true;
+    voxel.castShadow = type !== 'redstone_dust';
     voxel.userData.type = type;
 
     scene.add(voxel);
@@ -930,7 +964,7 @@ function spawnItemDrop(type, position) {
         });
     } else {
         // 3D Mini block
-        const materials = getMaterials(type);
+        const materials = blockMaterials[type] || blockMaterials['dirt'];
         const geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
         const mesh = new THREE.Mesh(geometry, materials);
         mesh.position.copy(position);

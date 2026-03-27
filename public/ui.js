@@ -37,6 +37,14 @@ const inventoryItemsEl = document.getElementById('inventory-items');
 const craftSlots = document.querySelectorAll('#crafting-grid .craft-slot');
 const craftResult = document.getElementById('crafting-result');
 
+// Furnace Elements
+const furnaceInput = document.getElementById('furnace-input');
+const furnaceFuel = document.getElementById('furnace-fuel');
+const furnaceFlame = document.getElementById('furnace-flame');
+const furnaceResult = document.getElementById('furnace-result');
+
+let furnaceState = { input: null, fuel: null, result: null };
+
 let activeHotbarIndex = 0;
 let isInventoryOpen = false;
 let draggedItem = null; // What are we currently dragging
@@ -249,6 +257,102 @@ function getCraftingShape() {
     return gridStr.map(row => row.join(',')).join('|');
 }
 
+// --- Furnace Logic ---
+function updateFurnaceVisuals() {
+    furnaceInput.innerHTML = '';
+    furnaceFuel.innerHTML = '';
+    furnaceResult.innerHTML = '';
+
+    if (furnaceState.input) {
+        const img = document.createElement('img');
+        img.src = isoTextureCache[furnaceState.input] || textureCache[furnaceState.input];
+        img.draggable = true;
+        img.dataset.source = 'furnace_input';
+        img.addEventListener('dragstart', (e) => {
+            draggedItem = furnaceState.input;
+            draggedElement = img;
+        });
+        furnaceInput.appendChild(img);
+    }
+    if (furnaceState.fuel) {
+        const img = document.createElement('img');
+        img.src = isoTextureCache[furnaceState.fuel] || textureCache[furnaceState.fuel];
+        img.draggable = true;
+        img.dataset.source = 'furnace_fuel';
+        img.addEventListener('dragstart', (e) => {
+            draggedItem = furnaceState.fuel;
+            draggedElement = img;
+        });
+        furnaceFuel.appendChild(img);
+    }
+    if (furnaceState.result) {
+        const img = document.createElement('img');
+        img.src = isoTextureCache[furnaceState.result] || textureCache[furnaceState.result];
+        img.draggable = true;
+        img.dataset.source = 'furnace_result';
+        img.addEventListener('dragstart', (e) => {
+            draggedItem = furnaceState.result;
+            draggedElement = img;
+            // Clear result when dragged out
+            setTimeout(() => {
+                furnaceState.result = null;
+                updateFurnaceVisuals();
+            }, 0);
+        });
+        furnaceResult.appendChild(img);
+    }
+}
+
+function processSmelting() {
+    if (!furnaceState.fuel || furnaceState.fuel !== 'coal') return;
+    if (furnaceState.result) return; // Wait until result is cleared
+
+    let res = null;
+    if (furnaceState.input === 'iron_ore') res = 'iron_ingot';
+    if (furnaceState.input === 'gold_ore') res = 'gold_ingot';
+    if (furnaceState.input === 'sand') res = 'glass';
+    if (furnaceState.input === 'cobblestone') res = 'stone';
+    if (furnaceState.input === 'diamond_ore') res = 'diamond';
+    if (furnaceState.input === 'wood') res = 'coal'; // Charcoal technically, mapping to coal
+
+    if (res) {
+        furnaceState.input = null; // consume input
+        furnaceState.fuel = null; // consume fuel
+        furnaceState.result = res;
+        updateFurnaceVisuals();
+    }
+}
+
+furnaceInput.addEventListener('dragover', e => e.preventDefault());
+furnaceInput.addEventListener('drop', e => {
+    e.preventDefault();
+    if (draggedItem) {
+        if (draggedElement && draggedElement.dataset.source === 'inventory') inventorySlots[parseInt(draggedElement.dataset.index)] = null;
+        else if (draggedElement && draggedElement.dataset.source === 'hotbar') hotbarSlots[parseInt(draggedElement.dataset.index)] = null;
+        furnaceState.input = draggedItem;
+        draggedItem = null;
+        renderInventorySlots();
+        renderHotbar();
+        updateFurnaceVisuals();
+    }
+});
+
+furnaceFuel.addEventListener('dragover', e => e.preventDefault());
+furnaceFuel.addEventListener('drop', e => {
+    e.preventDefault();
+    if (draggedItem) {
+        if (draggedElement && draggedElement.dataset.source === 'inventory') inventorySlots[parseInt(draggedElement.dataset.index)] = null;
+        else if (draggedElement && draggedElement.dataset.source === 'hotbar') hotbarSlots[parseInt(draggedElement.dataset.index)] = null;
+        furnaceState.fuel = draggedItem;
+        draggedItem = null;
+        renderInventorySlots();
+        renderHotbar();
+        updateFurnaceVisuals();
+    }
+});
+
+furnaceFlame.addEventListener('click', processSmelting);
+
 function updateCrafting() {
     craftResult.innerHTML = '';
 
@@ -268,16 +372,19 @@ function updateCrafting() {
     // Pickaxes
     else if (shape === 'planks,planks,planks| ,stick, | ,stick, ') resultItem = 'wooden_pickaxe';
     else if (shape === 'cobblestone,cobblestone,cobblestone| ,stick, | ,stick, ') resultItem = 'stone_pickaxe';
-    else if (shape === 'iron_ore,iron_ore,iron_ore| ,stick, | ,stick, ') resultItem = 'iron_pickaxe';
-    else if (shape === 'gold_ore,gold_ore,gold_ore| ,stick, | ,stick, ') resultItem = 'gold_pickaxe';
-    else if (shape === 'diamond_ore,diamond_ore,diamond_ore| ,stick, | ,stick, ') resultItem = 'diamond_pickaxe';
+    else if (shape === 'iron_ingot,iron_ingot,iron_ingot| ,stick, | ,stick, ') resultItem = 'iron_pickaxe';
+    else if (shape === 'gold_ingot,gold_ingot,gold_ingot| ,stick, | ,stick, ') resultItem = 'gold_pickaxe';
+    else if (shape === 'diamond,diamond,diamond| ,stick, | ,stick, ') resultItem = 'diamond_pickaxe';
 
     // Axes (handles left and right orientation)
     else if (shape === 'planks,planks|planks,stick| ,stick' || shape === 'planks,planks|stick,planks|stick, ') resultItem = 'wooden_axe';
     else if (shape === 'cobblestone,cobblestone|cobblestone,stick| ,stick' || shape === 'cobblestone,cobblestone|stick,cobblestone|stick, ') resultItem = 'stone_axe';
-    else if (shape === 'iron_ore,iron_ore|iron_ore,stick| ,stick' || shape === 'iron_ore,iron_ore|stick,iron_ore|stick, ') resultItem = 'iron_axe';
-    else if (shape === 'gold_ore,gold_ore|gold_ore,stick| ,stick' || shape === 'gold_ore,gold_ore|stick,gold_ore|stick, ') resultItem = 'gold_axe';
-    else if (shape === 'diamond_ore,diamond_ore|diamond_ore,stick| ,stick' || shape === 'diamond_ore,diamond_ore|stick,diamond_ore|stick, ') resultItem = 'diamond_axe';
+    else if (shape === 'iron_ingot,iron_ingot|iron_ingot,stick| ,stick' || shape === 'iron_ingot,iron_ingot|stick,iron_ingot|stick, ') resultItem = 'iron_axe';
+    else if (shape === 'gold_ingot,gold_ingot|gold_ingot,stick| ,stick' || shape === 'gold_ingot,gold_ingot|stick,gold_ingot|stick, ') resultItem = 'gold_axe';
+    else if (shape === 'diamond,diamond|diamond,stick| ,stick' || shape === 'diamond,diamond|stick,diamond|stick, ') resultItem = 'diamond_axe';
+
+    // Furnace
+    else if (shape === 'cobblestone,cobblestone,cobblestone|cobblestone, ,cobblestone|cobblestone,cobblestone,cobblestone') resultItem = 'furnace';
 
     if (resultItem) {
         const img = document.createElement('img');
@@ -338,7 +445,20 @@ export function toggleInventory(controls) {
         inventoryEl.style.display = 'block';
     } else {
         inventoryEl.style.display = 'none';
+        document.getElementById('furnace-ui').style.display = 'none'; // Close furnace too
         controls.lock();
+    }
+}
+
+export function toggleFurnace(controls) {
+    const furnaceUI = document.getElementById('furnace-ui');
+    if (furnaceUI.style.display === 'none') {
+        controls.unlock();
+        inventoryEl.style.display = 'block'; // Open inventory to drag from
+        furnaceUI.style.display = 'block';
+        isInventoryOpen = true;
+    } else {
+        furnaceUI.style.display = 'none';
     }
 }
 
