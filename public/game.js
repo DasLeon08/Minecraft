@@ -16,7 +16,7 @@ let currentDimension = 'overworld'; // 'overworld' or 'nether'
 // Basic setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x7ec0ee); // More realistic sky blue // Richer sky blue
-scene.fog = new THREE.FogExp2(0x7ec0ee, 0.006); // Thinner fog, matches sky // Reduced fog density for longer draw distance
+scene.fog = new THREE.FogExp2(0x7ec0ee, 0.0035); // Decreased fog density for larger world size
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -343,7 +343,7 @@ const objects = []; // Active meshes for raycasting
 export const worldData = new Map(); // x,y,z -> type
 const renderedBlocks = new Map(); // x,y,z -> THREE.Mesh
 
-const worldSize = 64; // 64x64 blocks
+const worldSize = 96; // Increased from 64x64 to 96x96 blocks
 const worldDepth = -30; // generate down to this y-level
 
 const transparentBlocks = ['glass', 'leaves', 'water', 'lava'];
@@ -473,11 +473,30 @@ function generateTerrain(dimension) {
                 const detailNoise = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0); // Detail bumps
 
                 // Exponentiate the base noise to create flat valleys and steep mountains
-                // Adding 1 before squaring/cubing ensures we don't zero out negative values poorly
                 const elevation = Math.pow(Math.abs(baseNoise) * 2.5, 2.5) * Math.sign(baseNoise);
 
                 // Combine low-frequency dramatic elevation with high-frequency detail
                 let rawHeight = (elevation * 30) + (detailNoise * 8) - 10;
+
+                // Oceans and Rivers noise layer
+                // Macro noise for oceans: if it drops low enough, dig out a huge basin
+                const oceanNoise = noise.fbm2D(x * 0.005 + 500, z * 0.005 + 500, 3, 0.5, 2.0);
+                if (oceanNoise < -0.2) {
+                    rawHeight -= Math.abs(oceanNoise + 0.2) * 50; // Deepen significantly
+                }
+
+                // River noise: ridged multifractal style (absolute value of noise)
+                const riverNoise = Math.abs(noise.fbm2D(x * 0.008 + 1000, z * 0.008 + 1000, 4, 0.5, 2.0));
+                // If riverNoise is very close to 0, dig a trench
+                if (riverNoise < 0.08) {
+                    const depthFactor = 1.0 - (riverNoise / 0.08); // 1 at center, 0 at edge
+                    rawHeight -= depthFactor * 15; // Cut down by up to 15 blocks
+                }
+
+                // Flatten out deep ocean floors
+                if (rawHeight < -12) {
+                    rawHeight = -12 + (rawHeight + 12) * 0.1;
+                }
 
                 // Make sure it doesn't go below bedrock
                 rawHeight = Math.max(rawHeight, worldDepth + 1);
@@ -499,7 +518,14 @@ function generateTerrain(dimension) {
                 // Determine surface block type based on height and biome
                 let surfaceBlock = 'grass';
                 if (y < -2.5) {
-                    surfaceBlock = 'sand'; // Beach/ocean floor level
+                    // Beach/ocean floor level - mix dirt, sand, and gravel for rivers/oceans
+                    if (riverNoise < 0.08) {
+                        surfaceBlock = Math.random() > 0.5 ? 'dirt' : 'gravel';
+                    } else if (oceanNoise < -0.2 && y < -5.5) {
+                        surfaceBlock = Math.random() > 0.7 ? 'gravel' : 'sand';
+                    } else {
+                        surfaceBlock = 'sand';
+                    }
                 } else if (y > 35.5) {
                     surfaceBlock = 'snow'; // Very high mountain peaks
                 } else if (y > 22.5) {
@@ -788,7 +814,7 @@ socket.on('changeDimension', (data) => {
     if (currentDimension === 'nether') {
         scene.background = new THREE.Color(0x3a0000); // Dark red
         scene.fog.color.setHex(0x3a0000);
-        scene.fog.density = 0.02; // Thicker fog in nether
+        scene.fog.density = 0.015; // Thicker fog in nether, scaled for new render distance
         directionalLight.intensity = 0.1;
         hemiLight.color.setHex(0xff3333);
         hemiLight.groundColor.setHex(0x110000);
@@ -796,7 +822,7 @@ socket.on('changeDimension', (data) => {
     } else {
         scene.background = new THREE.Color(0x7ec0ee); // Sky blue
         scene.fog.color.setHex(0x7ec0ee);
-        scene.fog.density = 0.006;
+        scene.fog.density = 0.0035;
         directionalLight.intensity = 0.8;
         hemiLight.color.setHex(0xffffff);
         hemiLight.groundColor.setHex(0x444444);
