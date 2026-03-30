@@ -593,44 +593,52 @@ function generateTerrain(dimension) {
                     setVoxelData(x, y, z, blockType);
                 }
             } else {
-                // Overworld terrain
-                // Heightmap via 2D noise with dramatic mountainous terrain
-                const baseNoise = noise.fbm2D(x * 0.015, z * 0.015, 5, 0.5, 2.0); // Continental noise
-                const detailNoise = noise.fbm2D(x * 0.05, z * 0.05, 4, 0.5, 2.0); // Detail bumps
+                // Overworld terrain - 1.18 Style Spline/FBM generation
 
-                // Exponentiate the base noise to create flat valleys and steep mountains
-                const elevation = Math.pow(Math.abs(baseNoise) * 2.5, 2.5) * Math.sign(baseNoise);
+                // 1. Continentalness (determines oceans vs landmasses)
+                const continentalness = noise.fbm2D(x * 0.005, z * 0.005, 4, 0.5, 2.0);
 
-                // Combine low-frequency dramatic elevation with high-frequency detail
-                let rawHeight = (elevation * 30) + (detailNoise * 8) - 10;
+                // 2. Erosion (determines flat plains vs jagged mountains)
+                const erosion = noise.fbm2D(x * 0.01 + 1000, z * 0.01 + 1000, 3, 0.5, 2.0);
 
-                // Oceans and Rivers noise layer
-                // Macro noise for oceans: if it drops low enough, dig out a huge basin
-                const oceanNoise = noise.fbm2D(x * 0.005 + 500, z * 0.005 + 500, 3, 0.5, 2.0);
-                if (oceanNoise < -0.2) {
-                    rawHeight -= Math.abs(oceanNoise + 0.2) * 50; // Deepen significantly
+                // 3. Peaks and Valleys (adds jagged high-frequency elevation)
+                const pv = noise.fbm2D(x * 0.03 + 2000, z * 0.03 + 2000, 5, 0.5, 2.0);
+
+                let baseHeight = 0;
+
+                // Deep Ocean basin
+                if (continentalness < -0.1) {
+                    baseHeight = -15 + continentalness * 30; // Deep down
+                }
+                // Continental land
+                else {
+                    baseHeight = 5 + (continentalness * 20);
+
+                    // High erosion = flatter, low erosion = mountains
+                    if (erosion < 0.1) {
+                        // High mountains
+                        baseHeight += Math.pow(Math.abs(pv) * 2.5, 3.0) * 25.0;
+                    } else {
+                        // Rolling hills/plains
+                        baseHeight += pv * 8;
+                    }
                 }
 
-                // River noise: ridged multifractal style (absolute value of noise)
-                const riverNoise = Math.abs(noise.fbm2D(x * 0.008 + 1000, z * 0.008 + 1000, 4, 0.5, 2.0));
-                // If riverNoise is very close to 0, dig a trench
-                if (riverNoise < 0.08) {
-                    const depthFactor = 1.0 - (riverNoise / 0.08); // 1 at center, 0 at edge
-                    rawHeight -= depthFactor * 15; // Cut down by up to 15 blocks
-                }
-
-                // Flatten out deep ocean floors
-                if (rawHeight < -12) {
-                    rawHeight = -12 + (rawHeight + 12) * 0.1;
+                // River noise: ridged multifractal style carving
+                const riverNoise = Math.abs(noise.fbm2D(x * 0.008 + 5000, z * 0.008 + 5000, 4, 0.5, 2.0));
+                if (riverNoise < 0.06 && baseHeight > -5) {
+                    const depthFactor = 1.0 - (riverNoise / 0.06);
+                    baseHeight -= depthFactor * 25; // Cut deep river ravines
                 }
 
                 // Make sure it doesn't go below bedrock
-                rawHeight = Math.max(rawHeight, worldDepth + 1);
+                let rawHeight = Math.max(baseHeight, worldDepth + 1);
+                // Cap extreme mountain heights
+                rawHeight = Math.min(rawHeight, 60);
 
                 const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
 
                 // Biome mapping via temperature/moisture 2D noise
-                // fbm2D returns 0 to 1, so we map it to -1 to 1 for our logic
                 const tempNoise = (noise.fbm2D(x * 0.02, z * 0.02, 3, 0.5, 2.0) * 2.0) - 1.0;
                 const moistureNoise = (noise.fbm2D(x * 0.02 + 100, z * 0.02 + 100, 3, 0.5, 2.0) * 2.0) - 1.0;
 
@@ -645,18 +653,18 @@ function generateTerrain(dimension) {
                 let surfaceBlock = 'grass';
                 if (y < -2.5) {
                     // Beach/ocean floor level - mix dirt, sand, and gravel for rivers/oceans
-                    if (riverNoise < 0.08) {
+                    if (riverNoise < 0.06) {
                         surfaceBlock = Math.random() > 0.5 ? 'dirt' : 'gravel';
-                    } else if (oceanNoise < -0.2 && y < -5.5) {
+                    } else if (continentalness < -0.1 && y < -5.5) {
                         surfaceBlock = Math.random() > 0.7 ? 'gravel' : 'sand';
                     } else {
                         surfaceBlock = 'sand';
                     }
-                } else if (y > 35.5) {
+                } else if (y > 45.5) {
                     surfaceBlock = 'snow'; // Very high mountain peaks
-                } else if (y > 22.5) {
+                } else if (y > 35.5) {
                     surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
-                } else if (y > 15.5) {
+                } else if (y > 25.5) {
                     surfaceBlock = 'stone'; // Rocky mountain sides
                 } else {
                     // Apply biome mapping
@@ -684,8 +692,13 @@ function generateTerrain(dimension) {
                         blockType = 'dirt';
                     } else {
                         // Stone layer - check for caves and ores
-                        const caveNoise = noise.noise3D(x * 0.1, currentY * 0.1, z * 0.1);
-                        if (caveNoise > 0.65) {
+                        // 1.18 Style "Cheese" Caves (large sprawling openings)
+                        const cheeseCaveNoise = noise.noise3D(x * 0.03, currentY * 0.03, z * 0.03);
+                        // 1.18 Style "Spaghetti" Caves (long winding tunnels)
+                        const spaghettiCaveNoise = Math.abs(noise.noise3D(x * 0.05 + 100, currentY * 0.05 + 100, z * 0.05 + 100));
+
+                        // Mix the noises. If the combination exceeds thresholds, dig a cave
+                        if (cheeseCaveNoise > 0.4 || spaghettiCaveNoise < 0.05) {
                             // Lava pools at bottom of caves if very deep
                             if (currentY < worldDepth + 5 && currentY > worldDepth) {
                                 setVoxelData(x, currentY, z, 'lava');
