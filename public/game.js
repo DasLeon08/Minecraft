@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { Sky } from 'three/addons/objects/Sky.js';
 import { generateTexture } from './textures.js';
 import * as UI from './ui.js';
 import { noise } from './noise.js';
@@ -17,7 +18,7 @@ let currentDimension = 'overworld'; // 'overworld' or 'nether'
 
 // Basic setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x7ec0ee); // More realistic sky blue // Richer sky blue
+scene.background = null; // Controlled by Sky addon
 scene.fog = new THREE.FogExp2(0x7ec0ee, 0.0035); // Decreased fog density for larger world size
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -26,14 +27,28 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 let timeOfDay = 0; // 0 to Math.PI * 2
 const dayDuration = 600; // seconds for a full day/night cycle
 
+// --- Sky & Environment ---
+const sky = new Sky();
+sky.scale.setScalar(450000);
+scene.add(sky);
+
+const sunPosition = new THREE.Vector3();
+
+// We will use the sky uniforms to simulate daylight
+const skyUniforms = sky.material.uniforms;
+skyUniforms['turbidity'].value = 10;
+skyUniforms['rayleigh'].value = 2;
+skyUniforms['mieCoefficient'].value = 0.005;
+skyUniforms['mieDirectionalG'].value = 0.8;
+
 // --- Sun & Moon ---
 const sunGeo = new THREE.BoxGeometry(10, 10, 10);
-const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffcf0 }); // Bright warm white
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffcf0, fog: false }); // Bright warm white, no fog so it pops
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 scene.add(sunMesh);
 
 const moonGeo = new THREE.BoxGeometry(8, 8, 8);
-const moonMat = new THREE.MeshBasicMaterial({ color: 0xddddff }); // Pale blue white
+const moonMat = new THREE.MeshBasicMaterial({ color: 0xddddff, fog: false }); // Pale blue white
 const moonMesh = new THREE.Mesh(moonGeo, moonMat);
 scene.add(moonMesh);
 
@@ -277,6 +292,17 @@ function startGame(isMultiplayer) {
 document.getElementById('btn-singleplayer').addEventListener('click', () => startGame(false));
 document.getElementById('btn-multiplayer').addEventListener('click', () => startGame(true));
 
+// WASD to start
+document.addEventListener('keydown', (e) => {
+    if (startScreen.style.display !== 'none') {
+        const key = e.code;
+        if (key === 'KeyW' || key === 'KeyA' || key === 'KeyS' || key === 'KeyD') {
+            startGame(false); // Default to singleplayer on quick start
+            // Slight delay to allow DOM to update before locking
+            setTimeout(() => controls.lock(), 100);
+        }
+    }
+});
 
 // initial camera position
 camera.position.set(0, 2, 0);
@@ -921,6 +947,7 @@ socket.on('changeDimension', (data) => {
         hemiLight.color.setHex(0xff3333);
         hemiLight.groundColor.setHex(0x110000);
         hemiLight.intensity = 0.5;
+        sky.visible = false;
     } else if (currentDimension === 'the_end') {
         scene.background = new THREE.Color(0x110022); // Dark purple/black void
         scene.fog.color.setHex(0x110022);
@@ -929,14 +956,16 @@ socket.on('changeDimension', (data) => {
         hemiLight.color.setHex(0xaa88cc); // Pale purple ambient
         hemiLight.groundColor.setHex(0x221133);
         hemiLight.intensity = 0.3;
+        sky.visible = false;
     } else {
-        scene.background = new THREE.Color(0x7ec0ee); // Sky blue
+        scene.background = null; // Let the Sky box handle it
         scene.fog.color.setHex(0x7ec0ee);
         scene.fog.density = 0.0035;
         directionalLight.intensity = 0.8;
         hemiLight.color.setHex(0xffffff);
         hemiLight.groundColor.setHex(0x444444);
         hemiLight.intensity = 0.6;
+        sky.visible = true;
     }
 
     // Generate base terrain for the new dimension locally
@@ -1374,8 +1403,20 @@ function animate() {
     moonMesh.position.set(-sunX, -sunY, 100);
 
     // Calculate light intensities based on sun height
-    if (currentDimension !== 'nether') {
+    if (currentDimension === 'overworld') {
         const normalizedSunHeight = Math.sin(timeOfDay); // 1 = noon, 0 = sunrise/sunset, -1 = midnight
+
+        // Update Sky addon uniform position
+        // timeOfDay goes from 0 to PI*2 (0 = sunrise, PI/2 = noon)
+        // Convert to elevation and azimuth for sky shader
+        const elevation = Math.sin(timeOfDay) * 90;
+        const azimuth = Math.cos(timeOfDay) * 180;
+
+        const phi = THREE.MathUtils.degToRad( 90 - elevation );
+        const theta = THREE.MathUtils.degToRad( azimuth );
+
+        sunPosition.setFromSphericalCoords( 1, phi, theta );
+        sky.material.uniforms[ 'sunPosition' ].value.copy( sunPosition );
 
         if (normalizedSunHeight > 0) {
             // Day
@@ -1385,12 +1426,13 @@ function animate() {
             ambientLight.intensity = Math.max(0.1, normalizedSunHeight * 0.45);
             hemiLight.intensity = Math.max(0.1, normalizedSunHeight * 0.7);
 
-            // Sky colors (Blue -> Orange at horizon -> Blue)
-            const skyR = Math.min(1.0, 0.49 + (1.0 - normalizedSunHeight) * 0.5); // Reddish at horizon
+            // Link fog to sun height
+            const skyR = Math.min(1.0, 0.49 + (1.0 - normalizedSunHeight) * 0.5);
             const skyG = Math.max(0.4, 0.75 - (1.0 - normalizedSunHeight) * 0.3);
             const skyB = 0.93;
-            scene.background.setRGB(skyR, skyG, skyB);
             scene.fog.color.setRGB(skyR, skyG, skyB);
+
+            // Keep background visible so sky sphere shows behind it (scene.background overridden by sky)
         } else {
             // Night
             directionalLight.position.copy(moonMesh.position);
@@ -1399,9 +1441,8 @@ function animate() {
             ambientLight.intensity = Math.max(0.05, -normalizedSunHeight * 0.1);
             hemiLight.intensity = 0.05;
 
-            // Night Sky (Dark Blue/Black)
+            // Night Sky Fog (Dark Blue/Black)
             const depth = -normalizedSunHeight; // 0 to 1
-            scene.background.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
             scene.fog.color.setRGB(0.02 * depth, 0.02 * depth, 0.05 * depth);
         }
     }
