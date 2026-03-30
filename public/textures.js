@@ -155,6 +155,7 @@ export function generateTexture(type) {
         snow: ['#ffffff', '#f2f2f2', '#e6e6e6', '#d9d9d9'], // Snow/Ice colors
         dirt_snow_side: ['#866043', '#79553a', '#966c4a'], // Base is dirt, snow top added later
         obsidian: ['#140f1a', '#1e1428', '#2d1e3d', '#3d284d'], // Dark purple/black
+        end_stone: ['#e6e6b8', '#d9d9a3', '#cccc8f', '#b3b37a'], // Pale yellow porous stone
         netherrack: ['#612121', '#752b2b', '#8a3333', '#521c1c'], // Fleshy red/brown
         glowstone: ['#ffcc66', '#ffdb99', '#ffb366', '#ff9933'], // Bright yellow/orange
         nether_brick: ['#2e151b', '#3d1c24', '#4c232d'], // Dark purplish-red brick

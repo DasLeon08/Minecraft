@@ -18,21 +18,22 @@ const ops = new Set(); // Player IDs with OP perms
 // Dimension -> Map of blocks (key: "x,y,z", value: type)
 const dimensions = {
     overworld: new Map(),
-    nether: new Map()
+    nether: new Map(),
+    the_end: new Map()
 };
 
 // --- Server-Side Mobs ---
 const mobs = {};
 const mobTypes = ['pig', 'zombie', 'cow', 'creeper'];
 
-function spawnMob(dimension = 'overworld') {
+function spawnMob(dimension = 'overworld', typeOverride = null, posOverride = null) {
     const id = Math.random().toString(36).substr(2, 9);
     mobs[id] = {
         id: id,
-        type: mobTypes[Math.floor(Math.random() * mobTypes.length)],
+        type: typeOverride || mobTypes[Math.floor(Math.random() * mobTypes.length)],
         dimension: dimension,
         // Spawn randomly within the world
-        position: {
+        position: posOverride || {
             x: Math.floor(Math.random() * 60) - 30,
             y: 35, // Drop from sky
             z: Math.floor(Math.random() * 60) - 30
@@ -280,8 +281,10 @@ io.on('connection', (socket) => {
             } else {
                 socket.emit('chatCommandResponse', "Player not found.");
             }
-        } else if (cmd === '/nether' || cmd === '/overworld') {
-            const dim = cmd === '/nether' ? 'nether' : 'overworld';
+        } else if (cmd === '/nether' || cmd === '/overworld' || cmd === '/end') {
+            let dim = 'overworld';
+            if (cmd === '/nether') dim = 'nether';
+            if (cmd === '/end') dim = 'the_end';
             let targetId = socket.id;
             if (args[1] && players[args[1]]) {
                 targetId = args[1];
@@ -289,6 +292,11 @@ io.on('connection', (socket) => {
             players[targetId].dimension = dim;
             // Teleport them
             players[targetId].position = { x: 0, y: 35, z: 0 };
+
+            if (dim === 'the_end' && !dimensions.the_end.has('dragon_spawned')) {
+                dimensions.the_end.set('dragon_spawned', true);
+                spawnMob('the_end', 'ender_dragon', { x: 0, y: 50, z: 0 }); // High above the island
+            }
 
             io.to(targetId).emit('changeDimension', { dimension: dim, position: players[targetId].position });
             socket.emit('chatCommandResponse', `Teleported ${targetId.substring(0,5)} to ${dim}.`);

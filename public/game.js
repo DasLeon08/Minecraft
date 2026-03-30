@@ -192,6 +192,7 @@ export const blockMaterials = {
     lava: new THREE.MeshBasicMaterial({ map: loadTex('lava'), color: 0xffffff }), // Lava emits light visually so use Basic
     bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') }),
     obsidian: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.4, map: loadTex('obsidian') }),
+    end_stone: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('end_stone') }),
     netherrack: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('netherrack') }),
     glowstone: new THREE.MeshBasicMaterial({ map: loadTex('glowstone'), color: 0xfffcc0 }), // Emits light like lava
     nether_brick: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('nether_brick') }),
@@ -486,7 +487,33 @@ function generateTerrain(dimension) {
     // Generate the initial world map based on dimension
     for (let x = -worldSize / 2; x < worldSize / 2; x++) {
         for (let z = -worldSize / 2; z < worldSize / 2; z++) {
-            if (dimension === 'nether') {
+            if (dimension === 'the_end') {
+                // End terrain: Large central floating island
+                const distSq = x * x + z * z;
+                const islandRadiusSq = 30 * 30; // 30 block radius island
+                if (distSq < islandRadiusSq) {
+                    // Taper the bottom of the island
+                    const depthAtPoint = 10 - Math.sqrt(distSq) / 3;
+                    const surfaceY = 25 + Math.floor(noise.fbm2D(x * 0.05, z * 0.05, 2, 0.5, 2.0) * 3);
+                    for (let y = surfaceY - Math.floor(depthAtPoint); y <= surfaceY; y++) {
+                        setVoxelData(x, y, z, 'end_stone');
+                    }
+
+                    // Add Obsidian Pillars
+                    if (Math.random() < 0.005 && distSq > 10 * 10 && distSq < 25 * 25) {
+                        const pillarHeight = 15 + Math.floor(Math.random() * 15);
+                        for (let px = -2; px <= 2; px++) {
+                            for (let pz = -2; pz <= 2; pz++) {
+                                if (px*px + pz*pz <= 4) { // circular pillar
+                                    for (let py = surfaceY + 1; py <= surfaceY + pillarHeight; py++) {
+                                        setVoxelData(x + px, py, z + pz, 'obsidian');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (dimension === 'nether') {
                 // Nether terrain: ceiling and floor with massive caves
                 for (let y = worldDepth; y <= 35; y++) {
                     // Bedrock at very bottom and very top
@@ -755,13 +782,15 @@ const mobGeometries = {
     pig: new THREE.BoxGeometry(0.8, 0.8, 0.8),
     zombie: new THREE.BoxGeometry(0.8, 1.8, 0.8),
     cow: new THREE.BoxGeometry(1.2, 1.2, 1.2),
-    creeper: new THREE.BoxGeometry(0.8, 1.6, 0.8)
+    creeper: new THREE.BoxGeometry(0.8, 1.6, 0.8),
+    ender_dragon: new THREE.BoxGeometry(8, 4, 16) // Huge box placeholder for dragon
 };
 const mobMaterials = {
     pig: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0xFFC0CB }),
     zombie: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x006400 }),
     cow: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x8B4513 }),
-    creeper: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x00FF00 })
+    creeper: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x00FF00 }),
+    ender_dragon: new THREE.MeshStandardMaterial({roughness: 0.2, color: 0x110022, emissive: 0x5500aa, emissiveIntensity: 0.2 })
 };
 
 socket.on('mobDamage', (data) => {
@@ -870,6 +899,14 @@ socket.on('changeDimension', (data) => {
         hemiLight.color.setHex(0xff3333);
         hemiLight.groundColor.setHex(0x110000);
         hemiLight.intensity = 0.5;
+    } else if (currentDimension === 'the_end') {
+        scene.background = new THREE.Color(0x110022); // Dark purple/black void
+        scene.fog.color.setHex(0x110022);
+        scene.fog.density = 0.01;
+        directionalLight.intensity = 0.05; // Very dim
+        hemiLight.color.setHex(0xaa88cc); // Pale purple ambient
+        hemiLight.groundColor.setHex(0x221133);
+        hemiLight.intensity = 0.3;
     } else {
         scene.background = new THREE.Color(0x7ec0ee); // Sky blue
         scene.fog.color.setHex(0x7ec0ee);
@@ -1157,23 +1194,23 @@ function animate() {
         const inLiquid = currentBlockType === 'water' || currentBlockType === 'lava';
 
         // Apply friction
-        const friction = inLiquid ? 2.0 : 10.0; // Less friction in water/lava, but speed is slower
+        const friction = inLiquid ? 5.0 : 10.0; // High friction/drag in liquid
         velocity.x -= velocity.x * friction * delta;
         velocity.z -= velocity.z * friction * delta;
 
-        // Apply gravity
-        const gravity = inLiquid ? 3.0 : 9.8 * 3.0;
+        // Apply gravity and buoyancy
+        const gravity = inLiquid ? 1.5 : 9.8 * 3.0; // Slower falling in liquid
         velocity.y -= gravity * delta;
 
         // Terminal velocity in liquid
-        if (inLiquid && velocity.y < -2.0) velocity.y = -2.0;
+        if (inLiquid && velocity.y < -1.5) velocity.y = -1.5;
 
 
         direction.z = Number(moveForward) - Number(moveBackward);
         direction.x = Number(moveRight) - Number(moveLeft);
         direction.normalize(); // Ensure consistent movement in all directions
 
-        let speed = inLiquid ? 150.0 : 400.0; // Slower movement in liquid
+        let speed = inLiquid ? 80.0 : 400.0; // Much slower in liquid
         if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
         if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
 
