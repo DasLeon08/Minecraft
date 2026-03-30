@@ -7,8 +7,20 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="crosshair"></div>
-    <div id="instructions">
+    <div id="start-screen">
+        <div class="title-container">
+            <h1 class="minecraft-title">WEB VOXEL</h1>
+            <h2 class="minecraft-subtitle">Edition</h2>
+        </div>
+        <div class="menu-buttons">
+            <button id="btn-singleplayer" class="mc-button">Singleplayer</button>
+            <button id="btn-multiplayer" class="mc-button">Multiplayer</button>
+        </div>
+        <div class="menu-footer">Minecraft Clone - JS Edition</div>
+    </div>
+
+    <div id="crosshair" style="display: none;"></div>
+    <div id="instructions" style="display: none;">
         Click to play<br/>
         <span style="font-size:16px">WASD to move, Space to jump, Click to mine, Right-click to place. <br/>Press 'E' for inventory. Press 'T' to chat.</span>
     </div>
@@ -18,7 +30,7 @@
         <input type="text" id="chat-input" placeholder="Type a message or command (e.g. /gamemode 1)..." style="display: none;" autocomplete="off" />
     </div>
 
-    <div id="hud-container">
+    <div id="hud-container" style="display: none;">
         <div id="status-bars">
             <div id="health-bar" class="status-bar">
                 <!-- Hearts rendered via JS -->

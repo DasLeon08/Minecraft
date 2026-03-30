@@ -238,7 +238,7 @@ const instructions = document.getElementById('instructions');
 const inventoryEl = document.getElementById('inventory');
 
 instructions.addEventListener('click', () => {
-    if (inventoryEl.style.display !== 'block') {
+    if (inventoryEl.style.display !== 'block' && document.getElementById('start-screen').style.display === 'none') {
         controls.lock();
     }
 });
@@ -249,12 +249,34 @@ controls.addEventListener('lock', () => {
 });
 
 controls.addEventListener('unlock', () => {
-    if (inventoryEl.style.display !== 'block') {
+    if (inventoryEl.style.display !== 'block' && document.getElementById('start-screen').style.display === 'none') {
         instructions.style.display = 'block';
     }
 });
 
 scene.add(controls.getObject());
+
+// --- Start Screen Logic ---
+const startScreen = document.getElementById('start-screen');
+const hudContainer = document.getElementById('hud-container');
+const crosshair = document.getElementById('crosshair');
+
+function startGame(isMultiplayer) {
+    startScreen.style.display = 'none';
+    hudContainer.style.display = 'flex';
+    crosshair.style.display = 'block';
+    instructions.style.display = 'block';
+
+    // In a real game, singleplayer might spin up a local worker or local state.
+    // For this prototype, we'll connect to the same server but perhaps disable chat UI
+    if (!isMultiplayer) {
+        document.getElementById('chat-container').style.display = 'none';
+    }
+}
+
+document.getElementById('btn-singleplayer').addEventListener('click', () => startGame(false));
+document.getElementById('btn-multiplayer').addEventListener('click', () => startGame(true));
+
 
 // initial camera position
 camera.position.set(0, 2, 0);
