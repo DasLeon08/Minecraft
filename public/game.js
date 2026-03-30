@@ -730,10 +730,71 @@ function generateTerrain(dimension) {
                     setVoxelData(x, wy, z, 'water');
                 }
 
+                // Procedural Structures: Mineshafts
+                // Use 3D noise to create intersecting long corridors
+                const shaftNoise1 = Math.abs(noise.noise3D(x * 0.05, 100, z * 0.05));
+                const shaftNoise2 = Math.abs(noise.noise3D(x * 0.05 + 1000, 200, z * 0.05 + 1000));
+
+                // If we are in a mineshaft grid
+                if ((shaftNoise1 < 0.03 || shaftNoise2 < 0.03) && topY > waterLevel) {
+                    const msY = worldDepth + 15; // fixed level for mineshafts
+                    // Carve tunnel
+                    for (let cx = -1; cx <= 1; cx++) {
+                        for (let cy = 0; cy <= 2; cy++) {
+                            for (let cz = -1; cz <= 1; cz++) {
+                                setVoxelData(x + cx, msY + cy, z + cz, null); // Air
+                            }
+                        }
+                    }
+                    // Place supports occasionally
+                    if (Math.random() < 0.1) {
+                        for (let cy = 0; cy <= 2; cy++) {
+                            setVoxelData(x - 1, msY + cy, z, 'wood');
+                            setVoxelData(x + 1, msY + cy, z, 'wood');
+                        }
+                        setVoxelData(x, msY + 2, z, 'wood'); // Top support
+                    } else if (Math.random() < 0.02) {
+                        // Place cobwebs (using glass as placeholder for cobweb if none exists, let's use leaves as they are transparent and slow movement might not be implemented but looks ok)
+                        setVoxelData(x, msY + 1, z, 'leaves');
+                    } else if (Math.random() < 0.1) {
+                        // Place rails (using gravel as a placeholder ground texture for rails for now)
+                        setVoxelData(x, msY - 1, z, 'planks'); // planks floor
+                    }
+                }
+
                 // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
                 const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
                 const treeChance = biome === 'forest' ? 0.05 : (biome === 'snow' ? 0.01 : 0.00); // No trees in desert
-                if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
+
+                // Procedural Structures: Villages
+                // We use a low-frequency noise to define "village zones" on flat plains/deserts
+                const villageZone = noise.fbm2D(x * 0.01 + 500, z * 0.01 + 500, 2, 0.5, 2.0);
+                const isVillageBiome = (biome === 'forest' || biome === 'desert') && topY >= waterLevel && topY < 15; // relatively flat surface
+                const isFlat = erosion > 0.1; // Make sure it's not a mountain
+
+                if (villageZone > 0.4 && isVillageBiome && isFlat) {
+                    // Inside a village zone, randomly place paths or buildings
+                    const villageDetail = noise.noise2D(x * 0.2, z * 0.2);
+
+                    if (villageDetail > 0.6) {
+                        // Path
+                        setVoxelData(x, topY, z, 'gravel');
+                    } else if (villageDetail < -0.6) {
+                        // Small house base
+                        const buildingMat = biome === 'desert' ? 'sand' : 'cobblestone';
+                        const wallMat = biome === 'desert' ? 'sand' : 'planks';
+                        const roofMat = biome === 'desert' ? 'sand' : 'wood';
+
+                        // We generate a simple 3x3 column to act as a house segment.
+                        // Because this runs per-column, dense areas of noise create blocky houses
+                        for (let h = 1; h <= 3; h++) {
+                            setVoxelData(x, topY + h, z, wallMat);
+                        }
+                        // Roof
+                        setVoxelData(x, topY + 4, z, roofMat);
+                        // Clear space inside if it's thick enough (simplification)
+                    }
+                } else if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
                     const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
 
                     // Trunk
@@ -844,6 +905,9 @@ const mobGeometries = {
     zombie: new THREE.BoxGeometry(0.8, 1.8, 0.8),
     cow: new THREE.BoxGeometry(1.2, 1.2, 1.2),
     creeper: new THREE.BoxGeometry(0.8, 1.6, 0.8),
+    sheep: new THREE.BoxGeometry(1.0, 1.0, 1.0),
+    skeleton: new THREE.BoxGeometry(0.8, 1.8, 0.8),
+    spider: new THREE.BoxGeometry(1.5, 0.6, 1.5),
     ender_dragon: new THREE.BoxGeometry(8, 4, 16) // Huge box placeholder for dragon
 };
 const mobMaterials = {
@@ -851,6 +915,9 @@ const mobMaterials = {
     zombie: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x006400 }),
     cow: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x8B4513 }),
     creeper: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0x00FF00 }),
+    sheep: new THREE.MeshStandardMaterial({roughness: 0.9, color: 0xE8E8E8 }), // Off-white wool color
+    skeleton: new THREE.MeshStandardMaterial({roughness: 0.8, color: 0xD3D3D3 }), // Light gray bone color
+    spider: new THREE.MeshStandardMaterial({roughness: 0.6, color: 0x333333, emissive: 0x440000, emissiveIntensity: 0.4 }), // Dark grey with red glowing eyes
     ender_dragon: new THREE.MeshStandardMaterial({roughness: 0.2, color: 0x110022, emissive: 0x5500aa, emissiveIntensity: 0.2 })
 };
 

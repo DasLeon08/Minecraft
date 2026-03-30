@@ -24,7 +24,7 @@ const dimensions = {
 
 // --- Server-Side Mobs ---
 const mobs = {};
-const mobTypes = ['pig', 'zombie', 'cow', 'creeper'];
+const mobTypes = ['pig', 'zombie', 'cow', 'creeper', 'sheep', 'skeleton', 'spider'];
 
 function spawnMob(dimension = 'overworld', typeOverride = null, posOverride = null) {
     const id = Math.random().toString(36).substr(2, 9);
@@ -67,7 +67,7 @@ setInterval(() => {
 
     const playerIds = Object.keys(players);
     Object.values(mobs).forEach(mob => {
-        if (mob.type === 'zombie' || mob.type === 'creeper') {
+        if (mob.type === 'zombie' || mob.type === 'creeper' || mob.type === 'skeleton' || mob.type === 'spider') {
             // Find closest player in the same dimension
             let closestDist = Infinity;
             let closestPlayer = null;
