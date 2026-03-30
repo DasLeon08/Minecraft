@@ -5,6 +5,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { generateTexture } from './textures.js';
 import * as UI from './ui.js';
 import { noise } from './noise.js';
@@ -50,7 +52,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuff
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio); // Sharper rendering on high-DPI displays
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+renderer.shadowMap.type = THREE.VSMShadowMap; // Softer variance shadows
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
 renderer.toneMappingExposure = 1.0; // Balanced exposure
 document.body.appendChild(renderer.domElement);
@@ -78,6 +80,12 @@ composer.addPass(bloomPass);
 const outputPass = new OutputPass();
 composer.addPass(outputPass);
 
+// Anti-Aliasing (FXAA) to smooth out jagged edges, especially post-SSAO
+const fxaaPass = new ShaderPass(FXAAShader);
+fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * window.devicePixelRatio);
+fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * window.devicePixelRatio);
+composer.addPass(fxaaPass);
+
 // --- Selection Outline ---
 const outlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.001, 1.001, 1.001)); // Slightly larger to prevent Z-fighting
 const outlineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
@@ -93,7 +101,9 @@ const directionalLight = new THREE.DirectionalLight(0xfffaec, 2.0); // Warmer, b
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
 directionalLight.shadow.mapSize.height = 4096;
-directionalLight.shadow.bias = -0.0001; // reduced shadow acne
+directionalLight.shadow.bias = -0.0005; // reduced shadow acne
+directionalLight.shadow.normalBias = 0.05; // reduces Peter-Panning and self-shadowing artifacts
+directionalLight.shadow.radius = 2; // softer blur for VSM
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 1000;
 directionalLight.shadow.camera.left = -300; // significantly expanded shadow area
@@ -171,7 +181,14 @@ export const blockMaterials = {
     diamond_ore: new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.5, map: loadTex('diamond_ore') }),
     lapis_ore: new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.3, map: loadTex('lapis_ore') }),
     redstone_ore: new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.2, map: loadTex('redstone_ore') }),
-    water: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.1, map: loadTex('water'), transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
+    water: new THREE.MeshPhysicalMaterial({
+        roughness: 0.05,
+        transmission: 0.8, // glass-like transparency
+        thickness: 0.5,
+        map: loadTex('water'),
+        transparent: true,
+        side: THREE.DoubleSide
+    }),
     lava: new THREE.MeshBasicMaterial({ map: loadTex('lava'), color: 0xffffff }), // Lava emits light visually so use Basic
     bedrock: new THREE.MeshStandardMaterial({ roughness: 1.0, map: loadTex('bedrock') }),
     obsidian: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.4, map: loadTex('obsidian') }),
@@ -1112,6 +1129,9 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
     ssaoPass.setSize(window.innerWidth, window.innerHeight);
+    const pixelRatio = renderer.getPixelRatio();
+    fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+    fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
 });
 
 // Render loop
@@ -1120,6 +1140,15 @@ function animate() {
 
     const time = performance.now();
     const delta = (time - prevTime) / 1000;
+
+    // Animate water and lava textures
+    if (blockMaterials['water'].map) {
+        blockMaterials['water'].map.offset.y += delta * 0.1;
+        blockMaterials['water'].map.offset.x += delta * 0.05;
+    }
+    if (blockMaterials['lava'].map) {
+        blockMaterials['lava'].map.offset.y += delta * 0.02;
+    }
 
     if (controls.isLocked === true) {
         // Check if player is in liquid
