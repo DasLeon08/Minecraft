@@ -638,15 +638,23 @@ function generateTerrain(dimension) {
 
                 const y = Math.floor(rawHeight) + 0.5; // Offset to n.5 so top is at integer
 
-                // Biome mapping via temperature/moisture 2D noise
-                const tempNoise = (noise.fbm2D(x * 0.02, z * 0.02, 3, 0.5, 2.0) * 2.0) - 1.0;
-                const moistureNoise = (noise.fbm2D(x * 0.02 + 100, z * 0.02 + 100, 3, 0.5, 2.0) * 2.0) - 1.0;
+                // Biome mapping via temperature/moisture 2D noise (scaled up for vast biomes)
+                // Use a lower frequency for larger distinct biome regions
+                const tempNoiseRaw = noise.fbm2D(x * 0.005, z * 0.005, 4, 0.5, 2.0);
+                const moistureNoise = noise.fbm2D(x * 0.005 + 100, z * 0.005 + 100, 4, 0.5, 2.0);
+
+                // Add a very high-frequency noise map to dither the borders of biomes to create smooth visual transitions
+                const ditherNoise = noise.noise2D(x * 0.5, z * 0.5) * 0.15; // ±0.15 perturbation
+                const tempNoise = tempNoiseRaw + ditherNoise; // Smooth blending between borders
 
                 let biome = 'forest';
                 if (tempNoise > 0.3 && moistureNoise < 0.2) {
                     biome = 'desert';
                 } else if (tempNoise < -0.3) {
                     biome = 'snow';
+                } else if (tempNoise > 0.1 && moistureNoise > 0.3) {
+                    // Could be jungle/swamp, stick to 'forest' but maybe different grass later
+                    biome = 'forest';
                 }
 
                 // Determine surface block type based on height and biome
@@ -663,9 +671,21 @@ function generateTerrain(dimension) {
                 } else if (y > 45.5) {
                     surfaceBlock = 'snow'; // Very high mountain peaks
                 } else if (y > 35.5) {
-                    surfaceBlock = 'snow_dirt'; // Lower mountain peaks / snow transition
+                    // Smooth transition line to snow at high elevations
+                    const elevDither = noise.noise2D(x * 0.3, z * 0.3) * 3;
+                    if (y > 38.5 + elevDither) {
+                        surfaceBlock = 'snow_dirt';
+                    } else {
+                        surfaceBlock = 'stone';
+                    }
                 } else if (y > 25.5) {
-                    surfaceBlock = 'stone'; // Rocky mountain sides
+                    // Smooth transition from grass to stone on mountains
+                    const elevDither = noise.noise2D(x * 0.4, z * 0.4) * 2;
+                    if (y > 28.5 + elevDither) {
+                        surfaceBlock = 'stone';
+                    } else {
+                        surfaceBlock = biome === 'desert' ? 'sand' : (biome === 'snow' ? 'snow' : 'grass');
+                    }
                 } else {
                     // Apply biome mapping
                     if (biome === 'desert') surfaceBlock = 'sand';

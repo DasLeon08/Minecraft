@@ -107,19 +107,21 @@ body {
 #hotbar {
     display: flex;
     gap: 0px;
-    background: rgba(40, 40, 40, 0.7); /* Minecraft dark semi-transparent bg */
-    border: 2px solid #222;
-    padding: 0;
+    background: rgba(0, 0, 0, 0.4); /* Dark semi-transparent background */
+    border: 2px solid #111; /* Outer dark border */
+    padding: 2px; /* Slight inner padding to separate slots from edge */
     image-rendering: pixelated;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.8);
+    border-radius: 2px;
 }
 
 .hotbar-slot {
     width: 40px;
     height: 40px;
-    background-color: transparent;
-    border: 2px solid #8b8b8b; /* Lighter border */
-    border-right-color: #373737;
-    border-bottom-color: #373737;
+    background-color: rgba(139, 139, 139, 0.8); /* Classic grey backing */
+    border: 2px solid #fff; /* Inner bevel borders */
+    border-top-color: #373737;
+    border-left-color: #373737;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -127,14 +129,21 @@ body {
     position: relative;
     user-select: none;
     box-sizing: border-box;
-    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.3); /* Authentic inset shadow */
+    box-shadow: inset -2px -2px 0px rgba(85,85,85,0.8); /* Inset shadow for 3D depth */
+    margin-right: 2px; /* Gap between slots */
+}
+.hotbar-slot:last-child {
+    margin-right: 0;
 }
 
 .hotbar-slot.active {
-    border: 3px solid white;
-    background-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 4px rgba(0,0,0,0.8), inset 0 0 4px rgba(0,0,0,0.8);
-    transform: scale(1.1); /* Authentic slight pop-out */
+    /* The active slot in MC has a thick white outline that overlaps adjacent slots slightly */
+    border: 3px solid #fff;
+    border-top-color: #fff;
+    border-left-color: #fff;
+    background-color: rgba(180, 180, 180, 0.8); /* Slightly brighter when selected */
+    box-shadow: inset -2px -2px 0px rgba(85,85,85,0.8), 0 0 0 2px rgba(0,0,0,0.6); /* Outer black stroke */
+    transform: scale(1.15); /* Pop out */
     z-index: 10;
 }
 
