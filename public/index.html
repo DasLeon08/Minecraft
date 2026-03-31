@@ -12,10 +12,41 @@
             <h1 class="minecraft-title">WEB VOXEL</h1>
             <h2 class="minecraft-subtitle">Edition</h2>
         </div>
-        <div class="menu-buttons">
+
+        <div class="menu-buttons" id="main-menu-buttons">
             <button id="btn-singleplayer" class="mc-button">Singleplayer</button>
             <button id="btn-multiplayer" class="mc-button">Multiplayer</button>
+            <button id="btn-options-main" class="mc-button">Options</button>
         </div>
+
+        <div class="menu-buttons" id="options-menu-buttons" style="display: none; flex-direction: column; gap: 10px;">
+            <div class="setting-row">
+                <label for="slider-render">Render Distance</label>
+                <input type="range" id="slider-render" min="16" max="128" step="16" value="64">
+                <span id="val-render">64 Chunks</span>
+            </div>
+            <div class="setting-row">
+                <label for="slider-fov">FOV</label>
+                <input type="range" id="slider-fov" min="30" max="110" step="5" value="75">
+                <span id="val-fov">75</span>
+            </div>
+            <div class="setting-row">
+                <label for="slider-gui">GUI Scale</label>
+                <input type="range" id="slider-gui" min="1" max="4" step="1" value="2">
+                <span id="val-gui">Auto</span>
+            </div>
+            <div class="setting-row">
+                <label for="slider-sens">Sensitivity</label>
+                <input type="range" id="slider-sens" min="0.1" max="2.0" step="0.1" value="1.0">
+                <span id="val-sens">1.0</span>
+            </div>
+            <div class="setting-row" style="justify-content: center; gap: 20px;">
+                <button id="btn-toggle-shadows" class="mc-button" style="width: 180px;">Shadows: ON</button>
+                <button id="btn-toggle-bloom" class="mc-button" style="width: 180px;">Bloom: ON</button>
+            </div>
+            <button id="btn-options-done" class="mc-button" style="margin-top: 15px;">Done</button>
+        </div>
+
         <div class="menu-footer">Minecraft Clone - JS Edition</div>
     </div>
 
@@ -23,6 +54,16 @@
     <div id="instructions" style="display: none;">
         Click to play<br/>
         <span style="font-size:16px">WASD to move, Space to jump, Click to mine, Right-click to place. <br/>Press 'E' for inventory. Press 'T' to chat.</span>
+    </div>
+
+
+    <div id="pause-screen" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; flex-direction: column;">
+        <h1 class="minecraft-title" style="margin-bottom: 40px; font-size: 40px; text-shadow: 2px 2px 0px #000;">Game Menu</h1>
+        <div class="menu-buttons" style="flex-direction: column; gap: 15px;">
+            <button id="btn-resume" class="mc-button" style="width: 400px;">Back to Game</button>
+            <button id="btn-options-pause" class="mc-button" style="width: 400px;">Options</button>
+            <button id="btn-disconnect" class="mc-button" style="width: 400px;">Save and Quit to Title</button>
+        </div>
     </div>
 
     <div id="chat-container">

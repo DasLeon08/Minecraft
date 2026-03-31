@@ -409,3 +409,33 @@ body {
     font-size: 14px;
     text-shadow: 1px 1px 0 #000;
 }
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 400px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border: 2px solid #000;
+    box-shadow: inset 2px 2px 0px #555, inset -2px -2px 0px #111;
+    color: white;
+    font-family: monospace;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.setting-row label {
+    width: 120px;
+    text-align: left;
+}
+
+.setting-row input[type=range] {
+    flex: 1;
+    margin: 0 15px;
+    cursor: pointer;
+}
+
+.setting-row span {
+    width: 80px;
+    text-align: right;
+}

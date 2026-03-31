@@ -21,7 +21,8 @@ const scene = new THREE.Scene();
 scene.background = null; // Controlled by Sky addon
 scene.fog = new THREE.FogExp2(0x7ec0ee, 0.0035); // Decreased fog density for larger world size
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+let currentFov = 75;
+const camera = new THREE.PerspectiveCamera(currentFov, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 // --- Day / Night Cycle Setup ---
 let timeOfDay = 0; // 0 to Math.PI * 2
@@ -31,6 +32,27 @@ const dayDuration = 600; // seconds for a full day/night cycle
 const sky = new Sky();
 sky.scale.setScalar(450000);
 scene.add(sky);
+
+// --- Voxel Clouds ---
+const cloudGroup = new THREE.Group();
+const cloudGeo = new THREE.BoxGeometry(10, 5, 10);
+const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+// Generate a field of clouds
+for (let i = 0; i < 50; i++) {
+    const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+    cloud.position.set(
+        (Math.random() - 0.5) * 400,
+        120 + Math.random() * 10,
+        (Math.random() - 0.5) * 400
+    );
+    // Make some clouds bigger
+    cloud.scale.set(1 + Math.random() * 3, 1, 1 + Math.random() * 3);
+    cloud.castShadow = true;
+    cloud.receiveShadow = true;
+    cloudGroup.add(cloud);
+}
+scene.add(cloudGroup);
+
 
 const sunPosition = new THREE.Vector3();
 
@@ -315,11 +337,20 @@ controls.addEventListener('lock', () => {
     inventoryEl.style.display = 'none';
 });
 
+let isGameRunning = false;
+let pauseMenuSource = 'start'; // 'start' or 'pause'
+
+
 controls.addEventListener('unlock', () => {
-    if (inventoryEl.style.display !== 'block' && document.getElementById('start-screen').style.display === 'none') {
-        instructions.style.display = 'block';
+    if (inventoryEl.style.display !== 'block' && document.getElementById('furnace-ui').style.display !== 'flex') {
+        if (isGameRunning) {
+            document.getElementById('pause-screen').style.display = 'flex';
+        } else {
+            document.getElementById('start-screen').style.display = 'flex';
+        }
     }
 });
+
 
 scene.add(controls.getObject());
 
@@ -328,10 +359,13 @@ const startScreen = document.getElementById('start-screen');
 const hudContainer = document.getElementById('hud-container');
 const crosshair = document.getElementById('crosshair');
 
+let isSingleplayer = false;
 function startGame(isMultiplayer) {
+    isSingleplayer = !isMultiplayer;
     startScreen.style.display = 'none';
     hudContainer.style.display = 'flex';
     crosshair.style.display = 'block';
+    isGameRunning = true;
     instructions.style.display = 'block';
 
     // In a real game, singleplayer might spin up a local worker or local state.
@@ -494,7 +528,7 @@ const objects = []; // Active meshes for raycasting
 export const worldData = new Map(); // x,y,z -> type
 const renderedBlocks = new Map(); // x,y,z -> THREE.Mesh
 
-const worldSize = 96; // Increased from 64x64 to 96x96 blocks
+let worldSize = 64; // Increased from 64x64 to 96x96 blocks
 const worldDepth = -30; // generate down to this y-level
 
 const transparentBlocks = ['glass', 'leaves', 'water', 'lava'];
@@ -918,7 +952,7 @@ const otherPlayers = {};
 const playerGeometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
 const playerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red for other players
 
-function addOtherPlayer(playerInfo) {
+function addOtherPlayer(playerInfo) { if (isSingleplayer) return;
     const mesh = new THREE.Mesh(playerGeometry, playerMaterial);
     mesh.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
     scene.add(mesh);
@@ -963,7 +997,7 @@ socket.on('playerDisconnected', (playerId) => {
     removeOtherPlayer(playerId);
 });
 
-socket.on('playerMoved', (playerInfo) => {
+socket.on('playerMoved', (playerInfo) => { if (isSingleplayer) return;
     if (otherPlayers[playerInfo.id]) {
         otherPlayers[playerInfo.id].position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
         // Add rotation sync here later if needed
@@ -1609,3 +1643,105 @@ animate();
 
 // Export for use in other modules if needed, or just let it run
 export { scene, camera, renderer };
+
+
+// --- Settings & Menus ---
+const btnOptionsMain = document.getElementById('btn-options-main');
+const btnOptionsPause = document.getElementById('btn-options-pause');
+const btnOptionsDone = document.getElementById('btn-options-done');
+const mainMenuButtons = document.getElementById('main-menu-buttons');
+const optionsMenuButtons = document.getElementById('options-menu-buttons');
+const pauseScreen = document.getElementById('pause-screen');
+
+btnOptionsMain.addEventListener('click', () => {
+    pauseMenuSource = 'start';
+    mainMenuButtons.style.display = 'none';
+    optionsMenuButtons.style.display = 'flex';
+});
+
+btnOptionsPause.addEventListener('click', () => {
+    pauseMenuSource = 'pause';
+    pauseScreen.style.display = 'none';
+    startScreen.style.display = 'flex';
+    document.querySelector('.title-container').style.display = 'none';
+    document.querySelector('.menu-footer').style.display = 'none';
+    mainMenuButtons.style.display = 'none';
+    optionsMenuButtons.style.display = 'flex';
+});
+
+btnOptionsDone.addEventListener('click', () => {
+    optionsMenuButtons.style.display = 'none';
+    if (pauseMenuSource === 'start') {
+        mainMenuButtons.style.display = 'flex';
+    } else {
+        startScreen.style.display = 'none';
+        document.querySelector('.title-container').style.display = 'block';
+        document.querySelector('.menu-footer').style.display = 'block';
+        pauseScreen.style.display = 'flex';
+    }
+});
+
+// Pause Menu Buttons
+document.getElementById('btn-resume').addEventListener('click', () => {
+    pauseScreen.style.display = 'none';
+    controls.lock();
+});
+document.getElementById('btn-disconnect').addEventListener('click', () => {
+    location.reload(); // Quickest way to clean state and return to title
+});
+
+// Setting Sliders
+document.getElementById('slider-render').addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    document.getElementById('val-render').innerText = val + " Chunks";
+    worldSize = val;
+    scene.fog.density = 0.5 / val;
+});
+document.getElementById('slider-fov').addEventListener('input', (e) => {
+    currentFov = parseInt(e.target.value);
+    document.getElementById('val-fov').innerText = currentFov;
+    camera.fov = currentFov;
+    camera.updateProjectionMatrix();
+});
+document.getElementById('slider-gui').addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    let scaleStr = val === 2 ? "Auto" : "x" + val;
+    document.getElementById('val-gui').innerText = scaleStr;
+    const scaleFactor = val * 0.5;
+    const hud = document.getElementById('hud-container');
+    const crosshair = document.getElementById('crosshair');
+    const chat = document.getElementById('chat-container');
+    if (hud) { hud.style.transform = `scale(${scaleFactor})`; hud.style.transformOrigin = 'bottom center'; }
+    if (crosshair) crosshair.style.transform = `translate(-50%, -50%) scale(${scaleFactor})`;
+    if (chat) { chat.style.transform = `scale(${scaleFactor})`; chat.style.transformOrigin = 'bottom left'; }
+});
+document.getElementById('slider-sens').addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    document.getElementById('val-sens').innerText = val.toFixed(1);
+    controls.pointerSpeed = val;
+});
+
+// Toggles
+let shadowsEnabled = true;
+const btnToggleShadows = document.getElementById('btn-toggle-shadows');
+btnToggleShadows.addEventListener('click', () => {
+    shadowsEnabled = !shadowsEnabled;
+    btnToggleShadows.innerText = "Shadows: " + (shadowsEnabled ? "ON" : "OFF");
+    renderer.shadowMap.enabled = shadowsEnabled;
+    directionalLight.castShadow = shadowsEnabled;
+    scene.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = shadowsEnabled;
+            child.receiveShadow = shadowsEnabled;
+        }
+    });
+});
+
+let bloomEnabled = true;
+const btnToggleBloom = document.getElementById('btn-toggle-bloom');
+btnToggleBloom.addEventListener('click', () => {
+    bloomEnabled = !bloomEnabled;
+    btnToggleBloom.innerText = "Bloom: " + (bloomEnabled ? "ON" : "OFF");
+    // We can't easily remove/add passes directly, so we just set strength to 0
+    if (bloomPass) bloomPass.strength = bloomEnabled ? 0.8 : 0.0;
+});
