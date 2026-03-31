@@ -36,14 +36,14 @@ const sunPosition = new THREE.Vector3();
 
 // We will use the sky uniforms to simulate daylight
 const skyUniforms = sky.material.uniforms;
-skyUniforms['turbidity'].value = 10;
-skyUniforms['rayleigh'].value = 2;
-skyUniforms['mieCoefficient'].value = 0.005;
+skyUniforms['turbidity'].value = 8; // Clearer sky
+skyUniforms['rayleigh'].value = 1.2; // Softer atmosphere scattering
+skyUniforms['mieCoefficient'].value = 0.002; // Less haze
 skyUniforms['mieDirectionalG'].value = 0.8;
 
 // --- Sun & Moon ---
 const sunGeo = new THREE.BoxGeometry(10, 10, 10);
-const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffcf0, fog: false }); // Bright warm white, no fog so it pops
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee, fog: false }); // Brighter sun for bloom // Bright warm white, no fog so it pops
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 scene.add(sunMesh);
 
@@ -69,7 +69,7 @@ renderer.setPixelRatio(window.devicePixelRatio); // Sharper rendering on high-DP
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap; // Softer variance shadows
 renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
-renderer.toneMappingExposure = 1.0; // Balanced exposure
+renderer.toneMappingExposure = 1.15; // Slightly punchier exposure // Balanced exposure
 document.body.appendChild(renderer.domElement);
 
 // --- Post-Processing Setup ---
@@ -79,16 +79,16 @@ composer.addPass(renderPass);
 
 // Screen Space Ambient Occlusion (SSAO) for deep corners and realistic voxel look
 const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
-ssaoPass.kernelRadius = 16;
-ssaoPass.minDistance = 0.005;
-ssaoPass.maxDistance = 0.1;
+ssaoPass.kernelRadius = 24; // Deeper ambient occlusion corners
+ssaoPass.minDistance = 0.003;
+ssaoPass.maxDistance = 0.15;
 composer.addPass(ssaoPass);
 
 // Bloom Pass for glowing lava and bright sun reflections
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-bloomPass.threshold = 0.8; // Only very bright things glow
-bloomPass.strength = 0.6; // Subtle glow
-bloomPass.radius = 0.5;
+bloomPass.threshold = 0.7; // More things slightly glow (like sand in sun)
+bloomPass.strength = 0.8; // Stronger dreamy glow
+bloomPass.radius = 0.8; // Wider soft bloom radius
 composer.addPass(bloomPass);
 
 // Add OutputPass to fix colors and tone mapping with composer
@@ -109,16 +109,16 @@ selectionOutline.visible = false;
 scene.add(selectionOutline);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xd9eaff, 0.45); // Cooler, softer ambient
+const ambientLight = new THREE.AmbientLight(0xdee5ff, 0.6); // Slightly brighter, crisper ambient // Cooler, softer ambient
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xfffaec, 2.0); // Warmer, brighter sunlight
+const directionalLight = new THREE.DirectionalLight(0xfffaec, 2.5); // Brighter directional light // Warmer, brighter sunlight
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 4096; // higher resolution shadows
 directionalLight.shadow.mapSize.height = 4096;
 directionalLight.shadow.bias = -0.0005; // reduced shadow acne
 directionalLight.shadow.normalBias = 0.05; // reduces Peter-Panning and self-shadowing artifacts
-directionalLight.shadow.radius = 2; // softer blur for VSM
+directionalLight.shadow.radius = 3; // Softer, more pleasant shadow edges // softer blur for VSM
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 1000;
 directionalLight.shadow.camera.left = -300; // significantly expanded shadow area
