@@ -268,3 +268,41 @@ export function generateTexture(type) {
     const img = canvas.toDataURL('image/png');
     return img;
 }
+
+
+// Generate a simple bump/height map based on the lightness of the generated texture
+export function generateBumpTexture(type) {
+    const origUrl = generateTexture(type);
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0);
+            const imgData = ctx.getImageData(0, 0, 16, 16);
+            const data = imgData.data;
+            // Convert to grayscale for height map (lighter = higher)
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                // Human eye luma
+                const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                // Enhance contrast for stronger bump
+                let bump = (luma - 128) * 1.5 + 128;
+                bump = Math.max(0, Math.min(255, bump));
+
+                data[i] = bump;
+                data[i + 1] = bump;
+                data[i + 2] = bump;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = origUrl;
+    });
+}
