@@ -75,14 +75,14 @@ const moonMesh = new THREE.Mesh(moonGeo, moonMat);
 scene.add(moonMesh);
 
 // --- Clouds ---
-const clouds = [];
-const cloudGeo = new THREE.BoxGeometry(6, 2, 8);
-const cloudMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.6 });
+// const clouds
+// old cloudGeo
+// old cloudMat
 for(let i=0; i<10; i++) {
     const cloud = new THREE.Mesh(cloudGeo, cloudMat);
     cloud.position.set(Math.random() * 200 - 100, 40 + Math.random() * 10, Math.random() * 200 - 100);
     scene.add(cloud);
-    clouds.push(cloud);
+    // clouds.push removed
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" }); // Better z-fighting resolution and high perf
@@ -739,8 +739,9 @@ function generateTerrain(dimension) {
                 } else if (tempNoise < -0.3) {
                     biome = 'snow';
                 } else if (tempNoise > 0.1 && moistureNoise > 0.3) {
-                    // Could be jungle/swamp, stick to 'forest' but maybe different grass later
-                    biome = 'forest';
+                    biome = 'jungle';
+                } else if (tempNoise > 0.2 && moistureNoise >= 0.2 && moistureNoise <= 0.3) {
+                    biome = 'savanna';
                 }
 
                 // Determine surface block type based on height and biome
@@ -812,6 +813,11 @@ function generateTerrain(dimension) {
                             continue; // Cave (air)
                         }
 
+                        // Deepslate transition
+                        if (currentY < -15) {
+                            blockType = 'cobblestone'; // Use cobblestone as deepslate
+                        }
+
                         // Ores and other underground blocks
                         if (Math.random() < 0.06) { // slightly increased frequency for new blocks
                             const depthPercent = (currentY - worldDepth) / (y - worldDepth);
@@ -870,7 +876,12 @@ function generateTerrain(dimension) {
 
                 // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
                 const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
-                const treeChance = biome === 'forest' ? 0.05 : (biome === 'snow' ? 0.01 : 0.00); // No trees in desert
+                let treeChance = 0.05;
+                if (biome === 'desert') treeChance = 0.0;
+                else if (biome === 'snow') treeChance = 0.01;
+                else if (biome === 'jungle') treeChance = 0.25; // extremely dense
+                else if (biome === 'savanna') treeChance = 0.005; // sparse
+
 
                 // Procedural Structures: Villages
                 // We use a low-frequency noise to define "village zones" on flat plains/deserts
@@ -1568,12 +1579,7 @@ function animate() {
     }
 
     // Move clouds slowly
-    clouds.forEach(cloud => {
-        cloud.position.x += 0.02;
-        if (cloud.position.x > 100) {
-            cloud.position.x = -100;
-        }
-    });
+    // old cloud animation removed
 
     // --- Day/Night Cycle ---
     // Smoothly interpolate time client-side between server ticks
