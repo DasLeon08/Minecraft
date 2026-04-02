@@ -146,7 +146,18 @@ export function generateTexture(type) {
         gold_block: ['#f8d548', '#d6b334', '#ffea6d'], // Shiny yellow
         iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d8d8d8', '#cca384'], // Stone with iron flakes
 
+
+        red_sand: ['#b35f2d', '#a35526', '#c26633'], // Red mesa sand
+        terracotta: ['#9c5c43', '#8e543d', '#a66448'], // Uncolored hardened clay
+        orange_terracotta: ['#a15325', '#914920', '#b05928'],
+        yellow_terracotta: ['#ba8523', '#a8781f', '#c48d25'],
+        sandstone: ['#d1c890', '#c2b982', '#e0d899'],
+        cactus_side: ['#0f5e14', '#0d5411', '#127318'],
+        cactus_top: ['#127318', '#0f5e14', '#0d5411'], // Similar but we will draw stripes
+        moss_block: ['#596e2d', '#4f6327', '#647c32'],
+        mud: ['#3e2d26', '#382821', '#45322a'],
         bookshelf: ['#b38b55', '#a37e4d', '#c2975e'], // Oak planks base, books added later
+
         lapis_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#2954a3', '#1e3e7a'], // Blue specks
         redstone_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#a31e1e', '#e62e2e'], // Red specks
         coal_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#1a1a1a', '#2b2b2b'],

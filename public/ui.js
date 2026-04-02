@@ -2,7 +2,7 @@ import { generateTexture, generateIsometricBlockIcon, generateToolIcon } from '.
 import { setActiveBlock } from './game.js';
 
 // Available item types for the UI
-export const availableItems = [
+export const availableItems = ['red_sand', 'terracotta', 'orange_terracotta', 'yellow_terracotta', 'sandstone', 'moss_block', 'mud', 'bookshelf', 'cactus',
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'gravel', 'bookshelf',

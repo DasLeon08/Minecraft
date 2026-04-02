@@ -222,6 +222,24 @@ function createPhysicalMat(name, options = {}) {
 
 // Materials Map
 export const blockMaterials = {
+    red_sand: createMat('red_sand'),
+    terracotta: createMat('terracotta'),
+    orange_terracotta: createMat('orange_terracotta'),
+    yellow_terracotta: createMat('yellow_terracotta'),
+    sandstone: createMat('sandstone'),
+    moss_block: createMat('moss_block'),
+    mud: createMat('mud'),
+    bookshelf: createMat('bookshelf'),
+    cactus_side: createMat('cactus_side'),
+    cactus_top: createMat('cactus_top'),
+    cactus: [
+        createMat('cactus_side'),
+        createMat('cactus_side'),
+        createMat('cactus_top'),
+        createMat('cactus_top'),
+        createMat('cactus_side'),
+        createMat('cactus_side')
+    ],
     grass: [
         createMat('grass_side'), // right
         createMat('grass_side'), // left
@@ -734,49 +752,53 @@ function generateTerrain(dimension) {
                 const tempNoise = tempNoiseRaw + ditherNoise; // Smooth blending between borders
 
                 let biome = 'forest';
-                if (tempNoise > 0.3 && moistureNoise < 0.2) {
+                if (tempNoise > 0.4 && moistureNoise < 0.1) {
+                    biome = 'mesa'; // Hot and very dry
+                } else if (tempNoise > 0.3 && moistureNoise < 0.3) {
                     biome = 'desert';
                 } else if (tempNoise < -0.3) {
                     biome = 'snow';
-                } else if (tempNoise > 0.1 && moistureNoise > 0.3) {
-                    biome = 'jungle';
-                } else if (tempNoise > 0.2 && moistureNoise >= 0.2 && moistureNoise <= 0.3) {
+                } else if (tempNoise > 0.1 && moistureNoise > 0.4) {
+                    biome = 'swamp';
+                } else if (tempNoise > 0.2 && moistureNoise >= 0.2 && moistureNoise <= 0.4) {
                     biome = 'savanna';
+                } else if (tempNoise > -0.1 && moistureNoise > 0.3) {
+                    biome = 'jungle';
                 }
 
                 // Determine surface block type based on height and biome
                 let surfaceBlock = 'grass';
                 if (y < -2.5) {
-                    // Beach/ocean floor level - mix dirt, sand, and gravel for rivers/oceans
-                    if (riverNoise < 0.06) {
-                        surfaceBlock = Math.random() > 0.5 ? 'dirt' : 'gravel';
-                    } else if (continentalness < -0.1 && y < -5.5) {
-                        surfaceBlock = Math.random() > 0.7 ? 'gravel' : 'sand';
-                    } else {
-                        surfaceBlock = 'sand';
-                    }
+                    if (riverNoise < 0.06) surfaceBlock = Math.random() > 0.5 ? 'dirt' : 'gravel';
+                    else if (continentalness < -0.1 && y < -5.5) surfaceBlock = Math.random() > 0.7 ? 'gravel' : 'sand';
+                    else surfaceBlock = 'sand';
                 } else if (y > 45.5) {
                     surfaceBlock = 'snow'; // Very high mountain peaks
                 } else if (y > 35.5) {
-                    // Smooth transition line to snow at high elevations
                     const elevDither = noise.noise2D(x * 0.3, z * 0.3) * 3;
-                    if (y > 38.5 + elevDither) {
-                        surfaceBlock = 'snow_dirt';
-                    } else {
-                        surfaceBlock = 'stone';
-                    }
+                    if (y > 38.5 + elevDither) surfaceBlock = 'snow_dirt';
+                    else surfaceBlock = 'stone';
                 } else if (y > 25.5) {
-                    // Smooth transition from grass to stone on mountains
                     const elevDither = noise.noise2D(x * 0.4, z * 0.4) * 2;
-                    if (y > 28.5 + elevDither) {
-                        surfaceBlock = 'stone';
-                    } else {
-                        surfaceBlock = biome === 'desert' ? 'sand' : (biome === 'snow' ? 'snow' : 'grass');
+                    if (y > 28.5 + elevDither) surfaceBlock = 'stone';
+                    else {
+                        if (biome === 'desert') surfaceBlock = 'sand';
+                        else if (biome === 'mesa') surfaceBlock = 'red_sand';
+                        else if (biome === 'snow') surfaceBlock = 'snow';
+                        else if (biome === 'swamp') surfaceBlock = 'mud';
+                        else surfaceBlock = 'grass';
                     }
                 } else {
-                    // Apply biome mapping
                     if (biome === 'desert') surfaceBlock = 'sand';
-                    if (biome === 'snow') surfaceBlock = 'snow';
+                    else if (biome === 'mesa') surfaceBlock = 'red_sand';
+                    else if (biome === 'snow') surfaceBlock = 'snow';
+                    else if (biome === 'swamp') surfaceBlock = 'mud';
+                }
+
+                // If Swamp, override water level locally by filling more blocks with water or creating muddy surface
+                if (biome === 'swamp' && (y - 0.5) > -3 && (y - 0.5) <= 0) {
+                    // Make it watery mud
+                    surfaceBlock = Math.random() > 0.5 ? 'water' : 'mud';
                 }
 
                 // Generate deep world layer by layer
@@ -794,9 +816,18 @@ function generateTerrain(dimension) {
                     } else if (currentY > topY - 3 && surfaceBlock === 'grass') {
                         blockType = 'dirt';
                     } else if (currentY > topY - 3 && surfaceBlock === 'sand') {
-                        blockType = 'sand';
+                        blockType = 'sandstone';
+                    } else if (currentY > topY - 3 && surfaceBlock === 'red_sand') {
+                        blockType = 'orange_terracotta';
+                    } else if (currentY > topY - 3 && surfaceBlock === 'mud') {
+                        blockType = 'dirt';
                     } else if (currentY > topY - 3 && surfaceBlock === 'snow') {
                         blockType = 'dirt';
+                    } else if (biome === 'mesa' && currentY > 10) {
+                        // Horizontal strata for Mesa (terracotta layers based on Y level)
+                        if (currentY % 7 === 0) blockType = 'yellow_terracotta';
+                        else if (currentY % 5 === 0) blockType = 'orange_terracotta';
+                        else blockType = 'terracotta';
                     } else {
                         // Stone layer - check for caves and ores
                         // 1.18 Style "Cheese" Caves (large sprawling openings)
@@ -896,14 +927,30 @@ function generateTerrain(dimension) {
                     }
                 }
 
-                // Procedural Trees (spawn only on grass or snow, frequency depends on biome)
-                const isTreeSurface = surfaceBlock === 'grass' || (surfaceBlock === 'snow' && biome === 'forest');
+                // Procedural Vegetation (spawn frequency depends on biome)
+                const isTreeSurface = surfaceBlock === 'grass' || surfaceBlock === 'mud' || (surfaceBlock === 'snow' && biome === 'forest');
                 let treeChance = 0.05;
-                if (biome === 'desert') treeChance = 0.0;
+                if (biome === 'desert' || biome === 'mesa') treeChance = 0.0;
                 else if (biome === 'snow') treeChance = 0.01;
-                else if (biome === 'jungle') treeChance = 0.25; // extremely dense
-                else if (biome === 'savanna') treeChance = 0.005; // sparse
+                else if (biome === 'jungle') treeChance = 0.25;
+                else if (biome === 'swamp') treeChance = 0.10;
+                else if (biome === 'savanna') treeChance = 0.005;
 
+                // Add cacti on sand
+                if ((biome === 'desert' || biome === 'mesa') && topY > waterLevel && surfaceBlock === 'sand' && Math.random() < 0.02) {
+                    const cactusHeight = Math.floor(Math.random() * 3) + 1; // 1-3 blocks tall
+                    for (let cy = 1; cy <= cactusHeight; cy++) {
+                        setVoxelData(x, topY + cy, z, cy === cactusHeight ? 'cactus_top' : 'cactus_side');
+                    }
+                }
+
+                // Cacti on red_sand
+                if ((biome === 'desert' || biome === 'mesa') && topY > waterLevel && surfaceBlock === 'red_sand' && Math.random() < 0.02) {
+                    const cactusHeight = Math.floor(Math.random() * 3) + 1;
+                    for (let cy = 1; cy <= cactusHeight; cy++) {
+                        setVoxelData(x, topY + cy, z, cy === cactusHeight ? 'cactus_top' : 'cactus_side');
+                    }
+                }
 
                 // Procedural Structures: Villages
                 // We use a low-frequency noise to define "village zones" on flat plains/deserts
