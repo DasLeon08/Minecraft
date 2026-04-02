@@ -10,7 +10,7 @@ export const availableItems = ['red_sand', 'terracotta', 'orange_terracotta', 'y
     'water', 'lava', 'bedrock', 'snow', 'snow_dirt',
     'obsidian', 'netherrack', 'glowstone', 'nether_brick', 'soul_sand', 'quartz_ore',
     'glass', 'sea_lantern', 'quartz_block', 'purpur_block', 'emerald_block', 'lapis_block',
-    'log_birch', 'log_spruce', 'leaves_birch', 'leaves_spruce', 'tall_grass', 'fern', 'dandelion', 'poppy'
+    'log_birch', 'log_spruce', 'leaves_birch', 'leaves_spruce', 'tall_grass', 'fern', 'dandelion', 'poppy', 'tnt'
 ];
 
 export const availableTools = [

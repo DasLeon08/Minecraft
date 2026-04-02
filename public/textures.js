@@ -168,6 +168,9 @@ export function generateTexture(type) {
 
         lapis_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#2954a3', '#1e3e7a'], // Blue specks
         redstone_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#a31e1e', '#e62e2e'], // Red specks
+        tnt_side: ['#cc1f1f', '#b31b1b', '#e62222', '#ffffff'], // Red with white band
+        tnt_top: ['#cc1f1f', '#b31b1b', '#e62222', '#000000'], // Red with black fuse
+        tnt_bottom: ['#cc1f1f', '#b31b1b', '#e62222'],
         leaves_birch: ['#6eb85c', '#5a964a', '#81cc6d'], // Lighter green
         leaves_spruce: ['#3a5f33', '#2a4425', '#4c7a42'], // Darker green
         log_birch: ['#e6ebd6', '#d6dfbd', '#ffffff'], // White bark
@@ -244,6 +247,29 @@ export function generateTexture(type) {
              ctx.fillRect(0, y, 16, 1);
              ctx.fillRect(y + (y % 8 === 0 ? 0 : 8), y, 1, 4); // staggered brick verticals
         }
+    } else if (type === 'tnt_side') {
+        // Red base is done by the loop
+        // Draw white band
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 5, 16, 6);
+        // Draw TNT text roughly
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(2, 6, 3, 1);
+        ctx.fillRect(3, 7, 1, 3);
+        ctx.fillRect(6, 6, 1, 4);
+        ctx.fillRect(7, 7, 1, 1);
+        ctx.fillRect(8, 8, 1, 1);
+        ctx.fillRect(9, 6, 1, 4);
+        ctx.fillRect(11, 6, 3, 1);
+        ctx.fillRect(12, 7, 1, 3);
+    } else if (type === 'tnt_top') {
+        // Draw some grid lines
+        ctx.fillStyle = '#b31b1b';
+        ctx.fillRect(7, 0, 2, 16);
+        ctx.fillRect(0, 7, 16, 2);
+        // Draw fuse in middle
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(6, 6, 4, 4);
     } else if (type === 'bookshelf') {
         // Bookshelf styling over plank background
         ctx.fillStyle = '#4e3318'; // dark wood borders

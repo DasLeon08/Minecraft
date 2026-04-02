@@ -94,6 +94,108 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better lighting colors
 renderer.toneMappingExposure = 1.15; // Slightly punchier exposure // Balanced exposure
 document.body.appendChild(renderer.domElement);
 
+// --- Weather System ---
+let weatherState = 'clear'; // 'clear', 'rain', 'snow'
+let weatherTime = 0;
+const weatherParticlesGeometry = new THREE.BufferGeometry();
+const particleCount = 5000;
+const posArray = new Float32Array(particleCount * 3);
+const velArray = new Float32Array(particleCount * 3);
+
+for (let i = 0; i < particleCount; i++) {
+    posArray[i * 3] = (Math.random() - 0.5) * 40;     // x
+    posArray[i * 3 + 1] = Math.random() * 40;         // y
+    posArray[i * 3 + 2] = (Math.random() - 0.5) * 40; // z
+
+    velArray[i * 3] = (Math.random() - 0.5) * 2;      // vx
+    velArray[i * 3 + 1] = -5 - Math.random() * 10;    // vy (falling down)
+    velArray[i * 3 + 2] = (Math.random() - 0.5) * 2;  // vz
+}
+
+weatherParticlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+weatherParticlesGeometry.setAttribute('velocity', new THREE.BufferAttribute(velArray, 3));
+
+const rainMaterial = new THREE.PointsMaterial({
+    size: 0.1,
+    color: 0xaaaaee,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending
+});
+
+const snowMaterial = new THREE.PointsMaterial({
+    size: 0.2,
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.NormalBlending
+});
+
+const weatherParticles = new THREE.Points(weatherParticlesGeometry, rainMaterial);
+weatherParticles.visible = false;
+scene.add(weatherParticles);
+
+function updateWeather(delta) {
+    weatherTime += delta;
+
+    // Change weather randomly every ~60 seconds
+    if (weatherTime > 60) {
+        weatherTime = 0;
+        const r = Math.random();
+        if (r < 0.6) weatherState = 'clear';
+        else weatherState = 'active'; // biome determines if rain or snow
+    }
+
+    if (weatherState === 'clear') {
+        weatherParticles.visible = false;
+        return;
+    }
+
+    // Determine biome to set rain vs snow
+    const px = Math.floor(controls.getObject().position.x);
+    const pz = Math.floor(controls.getObject().position.z);
+
+    // Rough biome check based on noise
+    const t = noise.perlin2D(px * 0.005, pz * 0.005);
+    const isSnow = t < -0.15; // snow biome threshold from generation
+    const isDesert = t > 0.4;
+
+    if (isDesert) {
+        // No rain in desert
+        weatherParticles.visible = false;
+        return;
+    }
+
+    weatherParticles.visible = true;
+    weatherParticles.material = isSnow ? snowMaterial : rainMaterial;
+
+    // Update particle positions
+    const positions = weatherParticles.geometry.attributes.position.array;
+    const velocities = weatherParticles.geometry.attributes.velocity.array;
+
+    // Follow player
+    weatherParticles.position.x = controls.getObject().position.x;
+    weatherParticles.position.z = controls.getObject().position.z;
+    // Keep relative Y height for continuous falling effect
+
+    for (let i = 0; i < particleCount; i++) {
+        // Slow down snow
+        const speedMult = isSnow ? 0.3 : 1.0;
+
+        positions[i * 3] += velocities[i * 3] * delta * speedMult;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * delta * speedMult;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * delta * speedMult;
+
+        // Reset if too low
+        if (positions[i * 3 + 1] < -20) {
+            positions[i * 3 + 1] = 20 + Math.random() * 20;
+            positions[i * 3] = (Math.random() - 0.5) * 40;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 40;
+        }
+    }
+    weatherParticles.geometry.attributes.position.needsUpdate = true;
+}
+
 // --- Environment Reflections ---
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
@@ -338,8 +440,22 @@ export const blockMaterials = {
     tall_grass: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('tall_grass'), transparent: true, side: THREE.DoubleSide }),
     fern: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('fern'), transparent: true, side: THREE.DoubleSide }),
     dandelion: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dandelion'), transparent: true, side: THREE.DoubleSide }),
-    poppy: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('poppy'), transparent: true, side: THREE.DoubleSide })
+    poppy: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('poppy'), transparent: true, side: THREE.DoubleSide }),
+
+    tnt_side: createMat('tnt_side'),
+    tnt_top: createMat('tnt_top'),
+    tnt_bottom: createMat('tnt_bottom')
 };
+
+// Map arrays for directional textures
+blockMaterials['tnt'] = [
+    blockMaterials['tnt_side'],
+    blockMaterials['tnt_side'],
+    blockMaterials['tnt_top'],
+    blockMaterials['tnt_bottom'],
+    blockMaterials['tnt_side'],
+    blockMaterials['tnt_side']
+];
 
 export const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
 const dustGeometry = new THREE.BoxGeometry(1, 0.1, 1); // flat wire
@@ -435,7 +551,10 @@ let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
+let moveUp = false;
+let moveDown = false;
 let canJump = false;
+let isFlying = false;
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
@@ -461,6 +580,17 @@ const onKeyDown = (event) => {
                 moveRight = true;
                 break;
             case 'KeyF':
+                // Only allow flight in creative mode
+                if (currentGamemode === 1) {
+                    isFlying = !isFlying;
+                    if (!isFlying) {
+                        moveUp = false;
+                        moveDown = false;
+                    } else {
+                        velocity.y = 0; // stop falling
+                    }
+                }
+
                 // Check if looking at furnace
                 raycaster.setFromCamera(mouse, camera);
                 const intersects = raycaster.intersectObjects(objects, false);
@@ -471,6 +601,10 @@ const onKeyDown = (event) => {
                 }
                 break;
             case 'Space':
+                if (isFlying) {
+                    moveUp = true;
+                    break;
+                }
                 // Check if in liquid for swimming
                 const pPosJump = controls.getObject().position;
                 const typeJump = getVoxelData(Math.floor(pPosJump.x), Math.floor(pPosJump.y - 0.5), Math.floor(pPosJump.z));
@@ -479,6 +613,11 @@ const onKeyDown = (event) => {
                 } else if (canJump === true) {
                     velocity.y += 10;
                     canJump = false;
+                }
+                break;
+            case 'ShiftLeft':
+                if (isFlying) {
+                    moveDown = true;
                 }
                 break;
             case 'Digit1': UI.selectHotbarSlot(0); break;
@@ -554,6 +693,12 @@ const onKeyUp = (event) => {
         case 'KeyD':
             moveRight = false;
             break;
+        case 'Space':
+            moveUp = false;
+            break;
+        case 'ShiftLeft':
+            moveDown = false;
+            break;
     }
 };
 
@@ -581,6 +726,47 @@ function setVoxelData(x, y, z, type) {
 
 function getVoxelData(x, y, z) {
     return worldData.get(getBlockKey(x, y, z));
+}
+
+function explode(cx, cy, cz, radius) {
+    const rSq = radius * radius;
+    // Basic explosion effect: remove blocks in a sphere
+    for (let x = -radius; x <= radius; x++) {
+        for (let y = -radius; y <= radius; y++) {
+            for (let z = -radius; z <= radius; z++) {
+                if (x*x + y*y + z*z <= rSq) {
+                    const bx = cx + x;
+                    const by = cy + y;
+                    const bz = cz + z;
+                    const key = getBlockKey(bx, by, bz);
+                    const bType = worldData.get(key);
+
+                    if (bType && bType !== 'bedrock') {
+                        worldData.delete(key);
+                        updateBlockVisibility(bx, by, bz);
+                        socket.emit('updateBlock', { action: 'remove', position: {x:bx, y:by, z:bz}, dimension: currentDimension });
+                    }
+                }
+            }
+        }
+    }
+
+    // Update neighbors to recalculate mesh visibility
+    for (let x = -radius - 1; x <= radius + 1; x++) {
+        for (let y = -radius - 1; y <= radius + 1; y++) {
+            for (let z = -radius - 1; z <= radius + 1; z++) {
+                updateBlockVisibility(cx + x, cy + y, cz + z);
+            }
+        }
+    }
+
+    // Simple flash effect
+    const flash = new THREE.PointLight(0xffffff, 5, 20);
+    flash.position.set(cx, cy, cz);
+    scene.add(flash);
+    setTimeout(() => {
+        scene.remove(flash);
+    }, 100);
 }
 
 function isTransparent(type) {
@@ -1535,6 +1721,18 @@ document.addEventListener('mousedown', (event) => {
                     const y = pos.y;
                     const z = Math.round(pos.z);
 
+                    // TNT interaction
+                    if (blockType === 'tnt') {
+                        // Ignite TNT
+                        // Change color to white temporarily to simulate flashing
+                        intersect.object.material = new THREE.MeshBasicMaterial({color: 0xffffff});
+
+                        setTimeout(() => {
+                            explode(x, y, z, 4);
+                        }, 3000);
+                        return;
+                    }
+
                     if (canHarvest(blockType, activeBlockType)) {
                         // Spawn physical drop if in survival
                         if (currentGamemode === 0) {
@@ -1692,23 +1890,28 @@ function animate() {
         const inLiquid = currentBlockType === 'water' || currentBlockType === 'lava';
 
         // Apply friction
-        const friction = inLiquid ? 5.0 : 10.0; // High friction/drag in liquid
+        const friction = (inLiquid || isFlying) ? 5.0 : 10.0; // High friction/drag in liquid and air
         velocity.x -= velocity.x * friction * delta;
         velocity.z -= velocity.z * friction * delta;
 
-        // Apply gravity and buoyancy
-        const gravity = inLiquid ? 1.5 : 9.8 * 3.0; // Slower falling in liquid
-        velocity.y -= gravity * delta;
+        if (isFlying) {
+            velocity.y -= velocity.y * friction * delta;
+            if (moveUp) velocity.y = 15;
+            if (moveDown) velocity.y = -15;
+        } else {
+            // Apply gravity and buoyancy
+            const gravity = inLiquid ? 1.5 : 9.8 * 3.0; // Slower falling in liquid
+            velocity.y -= gravity * delta;
 
-        // Terminal velocity in liquid
-        if (inLiquid && velocity.y < -1.5) velocity.y = -1.5;
-
+            // Terminal velocity in liquid
+            if (inLiquid && velocity.y < -1.5) velocity.y = -1.5;
+        }
 
         direction.z = Number(moveForward) - Number(moveBackward);
         direction.x = Number(moveRight) - Number(moveLeft);
         direction.normalize(); // Ensure consistent movement in all directions
 
-        let speed = inLiquid ? 80.0 : 400.0; // Much slower in liquid
+        let speed = inLiquid ? 80.0 : (isFlying ? 600.0 : 400.0); // Slower in liquid, faster flying
         if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
         if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
 
@@ -1766,9 +1969,10 @@ function animate() {
                 controls.getObject().position.y = hitY.max.y + (playerSize.y / 2);
                 velocity.y = 0;
                 canJump = true;
+                if (isFlying) isFlying = false; // Land when hitting ground
 
                 // Fall damage logic
-                if (currentGamemode === 0 && prevVelocityY < -15.0 && !inLiquid) {
+                if (currentGamemode === 0 && prevVelocityY < -15.0 && !inLiquid && !isFlying) {
                     const fallDistance = Math.abs(prevVelocityY);
                     // arbitrary scaling for fall damage based on velocity
                     const damage = Math.floor((fallDistance - 15.0) / 2);
@@ -1892,6 +2096,8 @@ function animate() {
     updateItemDrops(delta);
 
     updateMobs(delta);
+
+    updateWeather(delta);
 
     prevTime = time;
 
