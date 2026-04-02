@@ -142,6 +142,10 @@ export function generateTexture(type) {
         cobblestone: ['#666666', '#555555', '#777777'],
         brick: ['#a35348', '#8f493f', '#b85e51'],
         gravel: ['#807c7c', '#6e6b6b', '#918d8d', '#575555'],
+        iron_block: ['#d8d8d8', '#cccccc', '#f0f0f0'], // White/Grey metallic
+        gold_block: ['#f8d548', '#d6b334', '#ffea6d'], // Shiny yellow
+        iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d8d8d8', '#cca384'], // Stone with iron flakes
+
         bookshelf: ['#b38b55', '#a37e4d', '#c2975e'], // Oak planks base, books added later
         lapis_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#2954a3', '#1e3e7a'], // Blue specks
         redstone_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#a31e1e', '#e62e2e'], // Red specks

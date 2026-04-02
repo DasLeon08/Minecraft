@@ -830,6 +830,28 @@ function generateTerrain(dimension) {
                             else if (Math.random() < 0.3) blockType = 'gravel';
                             else if (Math.random() < 0.1) blockType = 'dirt'; // occasional dirt pocket underground
                         }
+
+                        // Underground Dungeons
+                        if (currentY < 10 && currentY > worldDepth + 5 && Math.random() < 0.0005) {
+                            // Dig out a 5x5x4 room
+                            for (let dx = -2; dx <= 2; dx++) {
+                                for (let dy = 0; dy <= 3; dy++) {
+                                    for (let dz = -2; dz <= 2; dz++) {
+                                        // Walls
+                                        if (Math.abs(dx) === 2 || Math.abs(dz) === 2 || dy === 0 || dy === 3) {
+                                            setVoxelData(x + dx, currentY + dy, z + dz, 'cobblestone');
+                                        } else {
+                                            // Empty interior
+                                            setVoxelData(x + dx, currentY + dy, z + dz, null);
+                                        }
+                                    }
+                                }
+                            }
+                            // Treasure & Spawner
+                            setVoxelData(x, currentY + 1, z, 'iron_block'); // Placeholder spawner
+                            setVoxelData(x, currentY + 1, z + 1, 'wood'); // Placeholder chest
+                            setVoxelData(x, currentY + 1, z - 1, 'wood'); // Placeholder chest
+                        }
                     }
 
                     setVoxelData(x, currentY, z, blockType);
@@ -911,6 +933,65 @@ function generateTerrain(dimension) {
                         setVoxelData(x, topY + 4, z, roofMat);
                         // Clear space inside if it's thick enough (simplification)
                     }
+
+                } else if (biome === 'desert' && topY >= waterLevel && Math.random() < 0.001) {
+                    // Desert Pyramid (9x9 base)
+                    // We build it from the top down to easily create the stepped shape
+                    const baseHalf = 4;
+                    for (let h = 0; h <= baseHalf; h++) {
+                        const stepRadius = h;
+                        const levelY = topY + baseHalf - h + 1; // Pyramid points up
+                        for (let px = -stepRadius; px <= stepRadius; px++) {
+                            for (let pz = -stepRadius; pz <= stepRadius; pz++) {
+                                // Hollow inside
+                                if (Math.abs(px) < stepRadius && Math.abs(pz) < stepRadius && h > 0) {
+                                    if (h === baseHalf && px === 0 && pz === 0) {
+                                        setVoxelData(x, levelY, z, 'gold_block'); // Treasure
+                                    } else {
+                                        setVoxelData(x + px, levelY, z + pz, null); // Air inside
+                                    }
+                                } else {
+                                    setVoxelData(x + px, levelY, z + pz, 'sand'); // Sandstone equivalent
+                                }
+                            }
+                        }
+                    }
+                    // Fill beneath
+                    for (let px = -baseHalf; px <= baseHalf; px++) {
+                        for (let pz = -baseHalf; pz <= baseHalf; pz++) {
+                            for (let uy = topY; uy > topY - 3; uy--) {
+                                if (!getVoxelData(x + px, uy, z + pz)) {
+                                    setVoxelData(x + px, uy, z + pz, 'sand');
+                                }
+                            }
+                        }
+                    }
+                } else if (topY >= waterLevel && Math.random() < 0.001) {
+                    // Ruined Portal
+                    // Base platform
+                    for (let px = -2; px <= 2; px++) {
+                        for (let pz = -2; pz <= 2; pz++) {
+                            setVoxelData(x + px, topY, z + pz, Math.random() > 0.3 ? 'netherrack' : 'obsidian');
+                        }
+                    }
+                    setVoxelData(x, topY, z, 'lava'); // Center lava
+
+                    // Upright frame (4x5)
+                    for (let fx = -1; fx <= 2; fx++) {
+                        for (let fy = 1; fy <= 4; fy++) {
+                            // Only outline
+                            if (fx > -1 && fx < 2 && fy > 1 && fy < 4) continue;
+
+                            // Missing blocks randomly
+                            if (Math.random() < 0.3) continue;
+
+                            setVoxelData(x + fx, topY + fy, z, 'obsidian');
+                        }
+                    }
+                    // A single gold block nearby
+                    if (Math.random() < 0.5) setVoxelData(x + 2, topY + 1, z + 2, 'gold_block');
+                    else setVoxelData(x - 2, topY + 1, z - 2, 'gold_block');
+
                 } else if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
                     const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
 

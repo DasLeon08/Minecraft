@@ -1,13 +1,15 @@
-1. **Understand Request**: User wants to "make the world generation even better".
-2. **Current State**: We have a 1.18 style terrain generation based on Continentalness, Erosion, and Peaks/Valleys. It generates mountains, plains, rivers, and deep oceans. It has "Cheese" and "Spaghetti" caves, and basic biomes (Forest, Desert, Snow).
-3. **Ideas for "Even Better" World Generation**:
-   - **More Biomes**: Add more distinct biomes based on temperature and moisture (e.g., Jungle, Savannah, Tundra).
-   - **Trees and Vegetation**: Currently, there are no trees or tall grass generated on the surface. Adding procedural trees (wood pillar with leaves) and tall grass/flowers will make the world feel alive and vastly improve it.
-   - **Water Level**: Implement a global water level (e.g., y = 0). Fill empty blocks below y=0 with water to create actual oceans, lakes, and rivers instead of just deep ravines.
-   - **Better Caves**: Decorate caves with glowing ores or different stone types at depth (like Deepslate).
-4. **Plan of Action**:
-   - Update `generateTerrain` in `game.js`.
-   - **Water Generation**: Add a second pass (or within the main loop) to fill air blocks below `y = 0` with `water` block type.
-   - **Vegetation**: After the base terrain is generated, do a pass to add trees. A tree needs to check if the surface block is grass/dirt, then place logs upwards and a cluster of leaves.
-   - **More Block Types**: Ensure `textures.js` has textures for wood and leaves (it does).
-   - Update the terrain generation logic to accommodate these new features cleanly.
+1. **Understand Request**: User wants "noch mer strukturen" (even more structures) in the world generation.
+2. **Current Structures**:
+   - Trees (Oak logs + leaves)
+   - Mineshafts (Underground corridors with wood supports and plank floors)
+   - Villages (Surface paths and blocky houses based on noise)
+3. **Ideas for New Structures**:
+   - **Desert Pyramids / Temples**: In desert biomes, occasionally spawn a large sandstone pyramid structure.
+   - **Dungeons / Spawners**: Small underground cobblestone rooms with a spawner block (or just a central block of iron/gold) and chest (we can use wood/planks as a placeholder).
+   - **Ruined Portals**: Randomly generated ruined obsidian portals on the surface or underground, surrounded by netherrack.
+   - **Giant Mushrooms**: In specific rare biomes (or random spots), spawn giant red/brown mushrooms made of custom blocks or placeholders (maybe brick and dirt).
+4. **Implementation Plan**:
+   - Similar to `treesToPlant`, we can collect coordinates for larger multi-block structures (like Pyramids and Ruined Portals) in a `structuresToBuild` array during the main loop, and build them in a post-processing loop. This avoids the "cut off" issue where noise-based generation truncates structures.
+   - **Underground Dungeons**: If deep underground (`currentY < 0`), small chance to clear a 5x5x4 room, line it with cobblestone, and place a "treasure" block in the middle.
+   - **Surface Ruined Portals**: If on the surface, very small chance to build an upright obsidian frame (some blocks missing) with a netherrack base and lava.
+   - Update `game.js`.
