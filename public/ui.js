@@ -6,9 +6,11 @@ export const availableItems = ['red_sand', 'terracotta', 'orange_terracotta', 'y
     'grass', 'dirt', 'stone', 'wood', 'planks',
     'leaves', 'sand', 'glass', 'cobblestone', 'brick',
     'gravel', 'bookshelf',
-    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'lapis_ore', 'redstone_ore',
+    'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'lapis_ore', 'redstone_ore', 'emerald_ore',
     'water', 'lava', 'bedrock', 'snow', 'snow_dirt',
-    'obsidian', 'netherrack', 'glowstone', 'nether_brick', 'soul_sand', 'quartz_ore'
+    'obsidian', 'netherrack', 'glowstone', 'nether_brick', 'soul_sand', 'quartz_ore',
+    'glass', 'sea_lantern', 'quartz_block', 'purpur_block', 'emerald_block', 'lapis_block',
+    'log_birch', 'log_spruce', 'leaves_birch', 'leaves_spruce', 'tall_grass', 'fern', 'dandelion', 'poppy'
 ];
 
 export const availableTools = [

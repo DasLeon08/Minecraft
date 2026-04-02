@@ -147,6 +147,14 @@ export function generateTexture(type) {
         iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d8d8d8', '#cca384'], // Stone with iron flakes
 
 
+        emerald_block: ['#41f095', '#2ecc71', '#58f7a6'], // Bright green
+        emerald_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#41f095', '#2ecc71'], // Stone with green chunks
+        lapis_block: ['#2e43ba', '#1a2c91', '#4258d6'], // Deep blue
+        glass: ['#ffffff', '#e6f2ff', '#ccf2ff'], // Transparent light blueish
+        glowstone: ['#ffdb58', '#e6b800', '#ffd11a', '#cc9900'], // Bright yellow/gold patchy
+        sea_lantern: ['#b3ffff', '#80ffff', '#e6ffff', '#4dffff'], // Pale glowing cyan/white
+        quartz_block: ['#f2f2f2', '#e6e6e6', '#ffffff'], // Very smooth white
+        purpur_block: ['#a97ba9', '#966a96', '#bc8cbc'], // Purplish end city block
         red_sand: ['#b35f2d', '#a35526', '#c26633'], // Red mesa sand
         terracotta: ['#9c5c43', '#8e543d', '#a66448'], // Uncolored hardened clay
         orange_terracotta: ['#a15325', '#914920', '#b05928'],
@@ -160,6 +168,14 @@ export function generateTexture(type) {
 
         lapis_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#2954a3', '#1e3e7a'], // Blue specks
         redstone_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#a31e1e', '#e62e2e'], // Red specks
+        leaves_birch: ['#6eb85c', '#5a964a', '#81cc6d'], // Lighter green
+        leaves_spruce: ['#3a5f33', '#2a4425', '#4c7a42'], // Darker green
+        log_birch: ['#e6ebd6', '#d6dfbd', '#ffffff'], // White bark
+        log_spruce: ['#362210', '#25170b', '#482e16'], // Dark brown bark
+        tall_grass: ['#00000000', '#63a339', '#50852e'], // Transparent base
+        fern: ['#00000000', '#418224', '#346b1c'],
+        dandelion: ['#00000000', '#ffeb3b', '#63a339'],
+        poppy: ['#00000000', '#f44336', '#63a339'],
         coal_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#1a1a1a', '#2b2b2b'],
         iron_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#d9af86', '#e6c3a1'],
         gold_ore: ['#7d7d7d', '#6e6e6e', '#8a8a8a', '#fcee4b', '#e6d845'],
@@ -242,6 +258,51 @@ export function generateTexture(type) {
                 ctx.fillStyle = bookColors[Math.floor(Math.random() * bookColors.length)];
                 ctx.fillRect(x, y, 2 + Math.floor(Math.random()*1), 5); // book width 2-3, height 5
             }
+        }
+    } else if (type === 'tall_grass' || type === 'fern' || type === 'dandelion' || type === 'poppy') {
+        // Clear background for cross-textures
+        ctx.clearRect(0, 0, 16, 16);
+        ctx.fillStyle = palette[1];
+
+        if (type === 'tall_grass') {
+            for (let i = 0; i < 20; i++) {
+                let gx = 2 + Math.floor(Math.random() * 12);
+                let gy = 4 + Math.floor(Math.random() * 12);
+                let gh = 16 - gy;
+                ctx.fillStyle = Math.random() > 0.5 ? palette[1] : palette[2];
+                ctx.fillRect(gx, gy, 1, gh);
+            }
+        } else if (type === 'fern') {
+             for (let i = 0; i < 3; i++) {
+                 ctx.fillStyle = Math.random() > 0.5 ? palette[1] : palette[2];
+                 let fx = 6 + i*2;
+                 for (let fy = 4 + i; fy < 16; fy += 2) {
+                     ctx.fillRect(fx - (fy%3), fy, 3, 1);
+                     ctx.fillRect(fx + (fy%3), fy, 3, 1);
+                 }
+                 ctx.fillRect(fx, 4+i, 2, 12-i);
+             }
+        } else if (type === 'dandelion') {
+            // Stem
+            ctx.fillStyle = '#4c7a42';
+            ctx.fillRect(7, 8, 2, 8);
+            // Flower head
+            ctx.fillStyle = palette[1]; // yellow
+            ctx.fillRect(6, 4, 4, 4);
+            ctx.fillRect(5, 5, 6, 2);
+            ctx.fillStyle = '#fff9c4'; // center
+            ctx.fillRect(7, 5, 2, 2);
+        } else if (type === 'poppy') {
+            // Stem
+            ctx.fillStyle = '#4c7a42';
+            ctx.fillRect(7, 8, 2, 8);
+            ctx.fillRect(6, 12, 1, 2); // leaf
+            // Flower head
+            ctx.fillStyle = palette[1]; // red
+            ctx.fillRect(5, 4, 6, 4);
+            ctx.fillRect(6, 3, 4, 6);
+            ctx.fillStyle = '#111'; // center
+            ctx.fillRect(7, 5, 2, 2);
         }
     } else if (type === 'gravel') {
         // Gravel is a bit noisier than plain noise, maybe add bigger pebbles

@@ -319,7 +319,26 @@ export const blockMaterials = {
     iron_ingot: new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.8, map: loadTex('iron_ingot'), transparent: true }),
     gold_ingot: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 1.0, map: loadTex('gold_ingot'), transparent: true }),
     diamond: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.8, map: loadTex('diamond'), transparent: true }),
-    coal: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('coal'), transparent: true })
+    coal: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('coal'), transparent: true }),
+
+    emerald_block: new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, map: loadTex('emerald_block') }),
+    emerald_ore: new THREE.MeshStandardMaterial({ roughness: 0.7, map: loadTex('emerald_ore') }),
+    emerald: new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0.5, map: loadTex('emerald_block'), transparent: true }),
+    lapis_block: new THREE.MeshStandardMaterial({ roughness: 0.4, map: loadTex('lapis_block') }),
+    glass: new THREE.MeshPhysicalMaterial({ roughness: 0.1, transmission: 0.9, transparent: true, opacity: 0.4, map: loadTex('glass') }),
+    glowstone: new THREE.MeshStandardMaterial({ roughness: 0.8, emissive: 0xffdb58, emissiveIntensity: 0.5, map: loadTex('glowstone') }),
+    sea_lantern: new THREE.MeshStandardMaterial({ roughness: 0.5, emissive: 0xb3ffff, emissiveIntensity: 0.6, map: loadTex('sea_lantern') }),
+    quartz_block: new THREE.MeshStandardMaterial({ roughness: 0.3, map: loadTex('quartz_block') }),
+    purpur_block: new THREE.MeshStandardMaterial({ roughness: 0.6, map: loadTex('purpur_block') }),
+
+    leaves_birch: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('leaves_birch'), transparent: true }),
+    leaves_spruce: new THREE.MeshStandardMaterial({ roughness: 0.8, map: loadTex('leaves_spruce'), transparent: true }),
+    log_birch: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('log_birch') }),
+    log_spruce: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('log_spruce') }),
+    tall_grass: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('tall_grass'), transparent: true, side: THREE.DoubleSide }),
+    fern: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('fern'), transparent: true, side: THREE.DoubleSide }),
+    dandelion: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('dandelion'), transparent: true, side: THREE.DoubleSide }),
+    poppy: new THREE.MeshStandardMaterial({ roughness: 0.9, map: loadTex('poppy'), transparent: true, side: THREE.DoubleSide })
 };
 
 export const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -860,6 +879,11 @@ function generateTerrain(dimension) {
                             else if (Math.random() < 0.4) blockType = 'coal_ore';
                             else if (Math.random() < 0.3) blockType = 'gravel';
                             else if (Math.random() < 0.1) blockType = 'dirt'; // occasional dirt pocket underground
+
+                            if (biome === 'snow' || biome === 'mesa') {
+                                // Simulate mountains by spawning emeralds in high altitudes or specific biomes
+                                if (depthPercent < 0.5 && Math.random() < 0.05) blockType = 'emerald_ore';
+                            }
                         }
 
                         // Underground Dungeons
@@ -1042,9 +1066,21 @@ function generateTerrain(dimension) {
                 } else if (isTreeSurface && topY >= waterLevel && Math.random() < treeChance) {
                     const treeHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks tall
 
+                    let logType = 'wood';
+                    let leafType = 'leaves';
+                    if (biome === 'snow') {
+                        logType = 'log_spruce';
+                        leafType = 'leaves_spruce';
+                    } else if (biome === 'forest' && Math.random() < 0.3) {
+                        logType = 'log_birch';
+                        leafType = 'leaves_birch';
+                    } else if (biome === 'swamp') {
+                        // Swamp trees are made of standard wood/leaves but usually generate vines
+                    }
+
                     // Trunk
                     for(let i = 1; i <= treeHeight; i++) {
-                        setVoxelData(x, topY + i, z, 'wood');
+                        setVoxelData(x, topY + i, z, logType);
                     }
 
                     // Leaves (simple 3x3 box at the top, slightly randomized)
@@ -1057,10 +1093,24 @@ function generateTerrain(dimension) {
                                 // Skip trunk location unless it's the very top leaf
                                 if (lx === 0 && lz === 0 && ly < 1) continue;
 
-                                setVoxelData(x + lx, leavesTop + ly, z + lz, 'leaves');
+                                setVoxelData(x + lx, leavesTop + ly, z + lz, leafType);
                             }
                         }
                     }
+                } else if (isTreeSurface && topY >= waterLevel && Math.random() < 0.1) {
+                    // Small vegetation (tall grass, ferns, flowers)
+                    let vegType = 'tall_grass';
+                    const r = Math.random();
+                    if (biome === 'forest') {
+                        if (r < 0.2) vegType = 'dandelion';
+                        else if (r < 0.4) vegType = 'poppy';
+                        else if (r < 0.6) vegType = 'fern';
+                    } else if (biome === 'snow') {
+                        vegType = 'fern';
+                    } else if (biome === 'swamp') {
+                        vegType = r < 0.5 ? 'tall_grass' : 'fern';
+                    }
+                    setVoxelData(x, topY + 1, z, vegType);
                 }
             }
         }
@@ -1535,6 +1585,78 @@ document.addEventListener('mousedown', (event) => {
     }
 });
 
+// --- Mobs ---
+const mobs = [];
+
+function spawnMob(type, x, y, z) {
+    let color = type === 'pig' ? 0xffaacc : 0x00aa00;
+    const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+    const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    scene.add(mesh);
+    mobs.push({
+        mesh: mesh,
+        type: type,
+        velocity: new THREE.Vector3(0, 0, 0),
+        direction: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+        speed: type === 'pig' ? 2 : 1,
+        lastTurn: performance.now()
+    });
+}
+
+function updateMobs(delta) {
+    const now = performance.now();
+    for (let i = 0; i < mobs.length; i++) {
+        const mob = mobs[i];
+
+        // Gravity
+        mob.velocity.y -= 20 * delta; // standard gravity
+
+        // Randomly change direction
+        if (now - mob.lastTurn > 3000 + Math.random() * 5000) {
+            mob.direction.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            mob.lastTurn = now;
+
+            // Randomly jump
+            if (Math.random() < 0.3 && mob.velocity.y === 0) { // simple grounded check
+                mob.velocity.y = 6;
+            }
+        }
+
+        // Move horizontally
+        const moveX = mob.direction.x * mob.speed * delta;
+        const moveZ = mob.direction.z * mob.speed * delta;
+
+        mob.mesh.position.x += moveX;
+        mob.mesh.position.y += mob.velocity.y * delta;
+        mob.mesh.position.z += moveZ;
+
+        // Simple floor collision (prevent falling below y=0 or ground if we check voxels)
+        // For simplicity we just ensure they don't fall forever, real voxel collision is better
+        let cx = Math.floor(mob.mesh.position.x);
+        let cy = Math.floor(mob.mesh.position.y);
+        let cz = Math.floor(mob.mesh.position.z);
+        let blockBelow = getVoxelData(cx, cy, cz);
+
+        if (blockBelow) {
+            mob.mesh.position.y = cy + 1;
+            mob.velocity.y = 0;
+        } else if (mob.mesh.position.y < -10) {
+            // reset if fell
+            mob.mesh.position.y = 100;
+        }
+    }
+}
+
+// Spawn some initial mobs
+setTimeout(() => {
+    for (let i = 0; i < 10; i++) {
+        spawnMob('pig', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+        spawnMob('zombie', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+    }
+}, 5000);
+
 // Handle window resize
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1768,6 +1890,8 @@ function animate() {
     }
 
     updateItemDrops(delta);
+
+    updateMobs(delta);
 
     prevTime = time;
 
