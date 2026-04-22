@@ -1787,9 +1787,9 @@ document.addEventListener('mousedown', (event) => {
 const mobs = [];
 
 function spawnMob(type, x, y, z) {
-    let color = type === 'pig' ? 0xffaacc : 0x00aa00;
-    const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-    const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+    // If we have custom geometries/materials from the multiplayer system, use them, otherwise fallback to simple boxes
+    const geometry = mobGeometries[type] || new THREE.BoxGeometry(0.8, 0.8, 0.8);
+    const material = mobMaterials[type] || new THREE.MeshStandardMaterial({ color: type === 'pig' ? 0xffaacc : 0x00aa00, roughness: 0.8 });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
     scene.add(mesh);
@@ -1852,6 +1852,10 @@ setTimeout(() => {
     for (let i = 0; i < 10; i++) {
         spawnMob('pig', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
         spawnMob('zombie', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+        spawnMob('cow', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+        spawnMob('creeper', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+        spawnMob('skeleton', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
+        spawnMob('spider', Math.random() * 40 - 20, 50, Math.random() * 40 - 20);
     }
 }, 5000);
 
